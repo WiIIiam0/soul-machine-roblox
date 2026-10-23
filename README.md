@@ -13,7 +13,10 @@ Le projet est entièrement configuré avec **Rojo 7.7.1**.
    ```bash
    rojo serve
    ```
-2. Dans **Roblox Studio** (avec la place `BrotatoRoblox.rbxl` ouverte), clique sur le plugin **Rojo** puis sur **Connect** (Port `34872`).
+2. Dans **Roblox Studio** (avec la place `BrotatoRoblox.rbxl` ouverte) :
+   - Ouvre le plugin **Rojo**.
+   - Indique le port **`34874`** dans le champ de port (pour éviter tout conflit avec tes autres fenêtres Studio qui utilisent les ports 34872 et 34873).
+   - Clique sur **Connect**.
 3. Tous les scripts se synchronisent automatiquement en temps réel !
 4. Appuie sur **Play** (F5) pour jouer immédiatement.
 
