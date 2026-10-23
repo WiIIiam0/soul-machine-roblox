@@ -1,0 +1,4 @@
+*.lock
+*.rbxlx
+*.tmp
+.DS_Store
