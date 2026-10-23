@@ -197,17 +197,18 @@ local function populateRowSlots(container: Frame, count: number, borderColor: Co
 			bStroke.Transparency = 0.2
 			box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
 
-			-- Centered Glyph
-			local glyphLabel = Instance.new("TextLabel")
-			glyphLabel.Name = "Glyph"
-			glyphLabel.Size = UDim2.new(1, 0, 1, 0)
-			glyphLabel.BackgroundTransparency = 1
-			glyphLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-			glyphLabel.Font = Enum.Font.GothamBold
-			glyphLabel.TextSize = 13
-			glyphLabel.Text = item.glyph or "🔹"
-			glyphLabel.ZIndex = 1
-			glyphLabel.Parent = box
+			-- Sci-Fi Technical Designation
+			local tagLabel = Instance.new("TextLabel")
+			tagLabel.Name = "Tag"
+			tagLabel.Size = UDim2.new(1, -2, 1, -2)
+			tagLabel.Position = UDim2.new(0, 1, 0, 1)
+			tagLabel.BackgroundTransparency = 1
+			tagLabel.TextColor3 = borderColor
+			tagLabel.Font = Enum.Font.GothamBlack
+			tagLabel.TextSize = 8
+			tagLabel.Text = item.tag or string.sub(item.name, 1, 4):upper()
+			tagLabel.ZIndex = 1
+			tagLabel.Parent = box
 
 			-- Optional image overlay if valid
 			if item.icon and item.icon ~= "" and not string.find(item.icon, "rbxassetid://107097914") then
@@ -505,25 +506,36 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	iStroke.Transparency = 0.3
 	iStroke.Parent = iconBox
 
-	-- Glowing sci-fi glyph (always visible and vibrant)
-	local iconGlyph = Instance.new("TextLabel")
-	iconGlyph.Name = "IconGlyph"
-	iconGlyph.Size = UDim2.new(1, 0, 1, 0)
-	iconGlyph.BackgroundTransparency = 1
-	iconGlyph.Text = cardData.glyph or "⚡"
-	iconGlyph.TextColor3 = cardData.rarityColor
-	iconGlyph.Font = Enum.Font.GothamBlack
-	iconGlyph.TextSize = 34
-	iconGlyph.ZIndex = 1
-	iconGlyph.Parent = iconBox
+	-- Holographic sci-fi technical badge (NO tacky cartoon emojis)
+	local iconBadge = Instance.new("TextLabel")
+	iconBadge.Name = "IconBadge"
+	iconBadge.Size = UDim2.new(1, -8, 1, -8)
+	iconBadge.Position = UDim2.new(0, 4, 0, 4)
+	iconBadge.BackgroundTransparency = 1
+	iconBadge.Text = cardData.tag or string.sub(cardData.title, 1, 12):upper()
+	iconBadge.TextColor3 = cardData.rarityColor
+	iconBadge.Font = Enum.Font.GothamBlack
+	iconBadge.TextSize = 11
+	iconBadge.TextWrapped = true
+	iconBadge.ZIndex = 1
+	iconBadge.Parent = iconBox
 
-	if cardData.icon and cardData.icon ~= "" and not string.find(cardData.icon, "rbxassetid://107097914") then
+	-- Check if asset exists in ReplicatedStorage.Icons (Bulk Import folder)
+	local resolvedImage = cardData.icon
+	local iconsFolder = ReplicatedStorage:FindFirstChild("Icons")
+	if iconsFolder and cardData.iconFile then
+		local found = iconsFolder:FindFirstChild(cardData.iconFile) or iconsFolder:FindFirstChild(string.gsub(cardData.iconFile, "%.png$", ""))
+		if found and (found:IsA("Decal") or found:IsA("Texture")) then
+			resolvedImage = found.Texture
+		end
+	end
+
+	if resolvedImage and resolvedImage ~= "" and not string.find(resolvedImage, "rbxassetid://107097914") then
 		local iconImg = Instance.new("ImageLabel")
-		iconImg.Size = UDim2.new(1, -12, 1, -12)
-		iconImg.Position = UDim2.new(0, 6, 0, 6)
+		iconImg.Size = UDim2.new(1, -10, 1, -10)
+		iconImg.Position = UDim2.new(0, 5, 0, 5)
 		iconImg.BackgroundTransparency = 1
-		iconImg.Image = cardData.icon
-		iconImg.ImageColor3 = cardData.rarityColor
+		iconImg.Image = resolvedImage
 		iconImg.ZIndex = 2
 		iconImg.Parent = iconBox
 	end
@@ -677,13 +689,13 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 
 	-- Populate 3-Row Inventory Slots
 	if data.weapons then
-		local wList: { { name: string, rank: number, glyph: string?, icon: string? } } = {}
+		local wList: { { name: string, rank: number, tag: string?, icon: string? } } = {}
 		for wId, rank in pairs(data.weapons) do
 			local wDef = WeaponsData.GetWeapon(wId)
 			table.insert(wList, {
 				name = if wDef then wDef.name else wId,
 				rank = rank,
-				glyph = if wDef and wDef.glyph then wDef.glyph else "🔫",
+				tag = if wDef and wDef.tag then string.gsub(wDef.tag, "[%[%]%s]", "") else string.sub(wId, 1, 4):upper(),
 				icon = if wDef then wDef.icon else nil,
 			})
 		end
@@ -691,34 +703,12 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.passives then
-		local pList: { { name: string, rank: number, glyph: string?, icon: string? } } = {}
+		local pList: { { name: string, rank: number, tag: string?, icon: string? } } = {}
 		for _, p in ipairs(data.passives) do
-			local tG = if p.trigger == "OnEnemyKilled" then "💀"
-				elseif p.trigger == "OnDamageDealt" then "⚔️"
-				elseif p.trigger == "OnCritHit" then "🎯"
-				elseif p.trigger == "OnDamageTaken" then "🛡️"
-				elseif p.trigger == "OnHeal" then "💚"
-				elseif p.trigger == "OnMove" then "👟"
-				elseif p.trigger == "OnStandStill" then "🧘"
-				elseif p.trigger == "OnLevelUp" then "⭐"
-				elseif p.trigger == "OnOverdrive" then "⚡"
-				elseif p.trigger == "OnGainXP" then "💎"
-				else "⚡"
-			local eG = if p.effect == "Heal" then "💚"
-				elseif p.effect == "GainMaxHP" then "❤️"
-				elseif p.effect == "GainStatDamage" then "💥"
-				elseif p.effect == "GainStatSpeed" then "👟"
-				elseif p.effect == "GainStatFireRate" then "⚡"
-				elseif p.effect == "GainCritChance" then "🎯"
-				elseif p.effect == "GainStatArmor" then "🛡️"
-				elseif p.effect == "GainLifeSteal" then "🩸"
-				elseif p.effect == "ChargeOverdrive" then "⚡"
-				elseif p.effect == "GainXP" then "💎"
-				else "✨"
 			table.insert(pList, {
 				name = p.name or "Passif",
 				rank = 1,
-				glyph = tG .. eG,
+				tag = "PASF",
 				icon = p.icon,
 			})
 		end
@@ -726,16 +716,16 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.stats then
-		local sList: { { name: string, rank: number, glyph: string?, icon: string? } } = {}
+		local sList: { { name: string, rank: number, tag: string?, icon: string? } } = {}
 		local statEntries = { "MaxHP", "Speed", "DamageMultiplier", "Armor", "LifeSteal", "RangeMultiplier" }
 		for _, sKey in ipairs(statEntries) do
 			if data.stats[sKey] then
 				local conf = StatTypes.STAT_CONFIG[sKey]
-				local glyph = if conf and conf.glyph then conf.glyph else "📈"
+				local tag = if conf and conf.tag then string.gsub(conf.tag, "[%[%]%s]", "") else string.sub(sKey, 1, 4):upper()
 				table.insert(sList, {
 					name = sKey,
 					rank = math.floor(data.stats[sKey]),
-					glyph = glyph,
+					tag = tag,
 					icon = if conf then conf.icon else nil,
 				})
 			end

@@ -42,10 +42,11 @@ local DEFAULT_STATS: PlayerStats = {
 }
 StatTypes.DEFAULT_STATS = DEFAULT_STATS
 
-local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
+local STAT_CONFIG: { [StatType]: { name: string, icon: string, tag: string, glyph: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
 	MaxHP = {
 		name = "Points de Vie Max",
 		icon = "rbxassetid://10709791437",
+		tag = "[ +PV COQUE ]",
 		glyph = "❤️",
 		perLevelBonus = 20,
 		format = function(v) return string.format("+%.0f PV", v) end,
@@ -54,6 +55,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	Speed = {
 		name = "Propulsion / Vitesse",
 		icon = "rbxassetid://10709791130",
+		tag = "[ +PROPULSION ]",
 		glyph = "👟",
 		perLevelBonus = 2.0,
 		format = function(v) return string.format("+%.1f Vitesse", v) end,
@@ -62,6 +64,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	DamageMultiplier = {
 		name = "Puissance de Feu",
 		icon = "rbxassetid://10709791557",
+		tag = "[ +PUISSANCE ]",
 		glyph = "⚔️",
 		perLevelBonus = 0.12,
 		format = function(v) return string.format("+%.0f%% Dégâts", v * 100) end,
@@ -70,6 +73,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	FireRateMultiplier = {
 		name = "Cadence de Tir",
 		icon = "rbxassetid://10709791334",
+		tag = "[ +CADENCE ]",
 		glyph = "⚡",
 		perLevelBonus = 0.08,
 		format = function(v) return string.format("+%.0f%% Cadence", v * 100) end,
@@ -78,6 +82,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	Armor = {
 		name = "Blindage / Armure",
 		icon = "rbxassetid://10709791281",
+		tag = "[ +BLINDAGE ]",
 		glyph = "🛡️",
 		perLevelBonus = 12,
 		format = function(v) return string.format("+%.0f Armure", v) end,
@@ -86,6 +91,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	CriticalChance = {
 		name = "Chances de Critique",
 		icon = "rbxassetid://10709791223",
+		tag = "[ +CRITIQUE ]",
 		glyph = "🎲",
 		perLevelBonus = 4,
 		format = function(v) return string.format("+%.0f%% Critique", v) end,
@@ -94,6 +100,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	PickupRadius = {
 		name = "Rayon Magnétique",
 		icon = "rbxassetid://10709791054",
+		tag = "[ +AIMANT ]",
 		glyph = "🧲",
 		perLevelBonus = 4,
 		format = function(v) return string.format("+%.0f Studs Rayon", v) end,
@@ -102,6 +109,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	LifeSteal = {
 		name = "Drain d'Énergie",
 		icon = "rbxassetid://10709791480",
+		tag = "[ +DRAIN-PV ]",
 		glyph = "🩸",
 		perLevelBonus = 0.02,
 		format = function(v) return string.format("+%.1f%% Vol de Vie", v * 100) end,
@@ -110,6 +118,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	BurnDamage = {
 		name = "Surcharge Thermique",
 		icon = "rbxassetid://10709791612",
+		tag = "[ +THERMIQUE ]",
 		glyph = "🔥",
 		perLevelBonus = 2.0,
 		format = function(v) return string.format("+%.1f Dégâts Brûlure", v) end,
@@ -118,6 +127,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, pe
 	RangeMultiplier = {
 		name = "Portée des Radars",
 		icon = "rbxassetid://10709791667",
+		tag = "[ +RADAR ]",
 		glyph = "🏹",
 		perLevelBonus = 0.15,
 		format = function(v) return string.format("+%.0f%% Portée", v * 100) end,

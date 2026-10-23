@@ -22,6 +22,16 @@ local TEXTURES = {
 	ObserverSensor = "rbxthumb://type=Asset&id=10402849066&w=420&h=420",
 }
 
+-- Authentic LEGO 3D Studs (Picots cylindriques Voxel / LEGO de PoHRoblox)
+local STUD_HEIGHT = 0.36
+local STUD_DIAMETER = 1.15
+local STUD_OFFSETS_2X2 = {
+	Vector3.new(-1, 0, -1),
+	Vector3.new(1, 0, -1),
+	Vector3.new(-1, 0, 1),
+	Vector3.new(1, 0, 1),
+}
+
 local function addTopTexture(part: BasePart, textureId: string, studsU: number, studsV: number): Texture
 	local tex = Instance.new("Texture")
 	tex.Texture = textureId
@@ -40,6 +50,45 @@ local function addAllFacesTexture(part: BasePart, textureId: string, studsU: num
 		tex.StudsPerTileU = studsU
 		tex.StudsPerTileV = studsV
 		tex.Parent = part
+	end
+end
+
+-- Génère les vrais picots cylindriques LEGO 3D sur le dessus des blocs (exactement comme dans PoHRoblox)
+local function addLegoStudsGrid(
+	parent: Instance,
+	widthX: number,
+	lengthZ: number,
+	topY: number,
+	centerPos: Vector3,
+	color: Color3,
+	material: Enum.Material
+)
+	local halfX = widthX / 2
+	local halfZ = lengthZ / 2
+	for x = -halfX + 2, halfX - 2, 4 do
+		for z = -halfZ + 2, halfZ - 2, 4 do
+			for _, offset in ipairs(STUD_OFFSETS_2X2) do
+				local stud = Instance.new("Part")
+				stud.Name = "LegoStud"
+				stud.Shape = Enum.PartType.Cylinder
+				stud.Size = Vector3.new(STUD_HEIGHT, STUD_DIAMETER, STUD_DIAMETER)
+				stud.CFrame = CFrame.new(
+					centerPos.X + x + offset.X,
+					topY + STUD_HEIGHT * 0.5,
+					centerPos.Z + z + offset.Z
+				) * CFrame.Angles(0, 0, math.rad(90))
+				stud.Anchored = true
+				stud.CanCollide = false
+				stud.CanQuery = false
+				stud.CanTouch = false
+				stud.CastShadow = true
+				stud.Color = color
+				stud.Material = material
+				stud.TopSurface = Enum.SurfaceType.Smooth
+				stud.BottomSurface = Enum.SurfaceType.Smooth
+				stud.Parent = parent
+			end
+		end
 	end
 end
 
@@ -64,6 +113,9 @@ function ArenaBuilder.BuildArena()
 	floor.Parent = arena
 	addTopTexture(floor, TEXTURES.NetheritePlating, 8, 8)
 
+	-- Picots cylindriques LEGO 3D sur l'arène de combat centrale (100x100)
+	addLegoStudsGrid(arena, 100, 100, 0.0, Vector3.new(0, 0, 0), Color3.fromRGB(50, 48, 55), Enum.Material.SmoothPlastic)
+
 	-- 2. Perimeter Warning Borders (Hazard Stripes - 12 studs wide along outer walls)
 	local hazardBorders = {
 		{ name = "HazardNorth", size = Vector3.new(300, 0.2, 12), pos = Vector3.new(0, 0.05, 144) },
@@ -83,6 +135,9 @@ function ArenaBuilder.BuildArena()
 		hPart.CanCollide = false
 		hPart.Parent = arena
 		addTopTexture(hPart, TEXTURES.HazardStripes, 4, 4)
+
+		-- Picots cylindriques LEGO sur les bandes de signalisation
+		addLegoStudsGrid(arena, cfg.size.X, cfg.size.Z, cfg.pos.Y + 0.1, cfg.pos, Color3.fromRGB(245, 210, 20), Enum.Material.SmoothPlastic)
 	end
 
 	-- 3. Crosswalk Industrial Walkways (IronArmor - 16 studs wide cross through center)
@@ -102,6 +157,9 @@ function ArenaBuilder.BuildArena()
 		wPart.CanCollide = false
 		wPart.Parent = arena
 		addTopTexture(wPart, TEXTURES.IronArmor, 6, 6)
+
+		-- Picots cylindriques LEGO sur les passerelles en acier
+		addLegoStudsGrid(arena, cfg.size.X, cfg.size.Z, cfg.pos.Y + 0.05, cfg.pos, Color3.fromRGB(195, 200, 210), Enum.Material.SmoothPlastic)
 	end
 
 	-- 4. Central Plasma Reactor Generator Core (ReactorCore)
@@ -115,6 +173,9 @@ function ArenaBuilder.BuildArena()
 	reactorPad.CanCollide = false
 	reactorPad.Parent = arena
 	addTopTexture(reactorPad, TEXTURES.ReactorCore, 6, 6)
+
+	-- Picots cylindriques lumineux sur le réacteur central
+	addLegoStudsGrid(arena, 36, 36, 0.08 + 0.12, Vector3.new(0, 0, 0), Color3.fromRGB(255, 60, 40), Enum.Material.Neon)
 
 	local reactorLight = Instance.new("PointLight")
 	reactorLight.Color = Color3.fromRGB(255, 60, 40)
