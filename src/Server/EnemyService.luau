@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -44,7 +45,146 @@ local function getEnemiesFolder(): Folder
 	return enemiesFolder
 end
 
+local cachedTemplates: { [string]: Model? } = {}
+
+local KEYWORD_MAPPINGS: { [string]: { string } } = {
+	ScoutDrone = { "drone_worker", "droneworker", "worker", "farmer", "scout", "minion_blue_melee", "minion_red_melee" },
+	AssaultMecha = { "drone_fighter", "dronefighter", "fighter", "assault", "gunner", "shooter", "minion_blue_ranged", "minion_red_ranged" },
+	SniperBot = { "sniper", "turret", "laserbot", "blaster" },
+	HeavyJuggernaut = { "spider", "tank", "heavy", "juggernaut", "brute", "colosse" },
+	KamikazeRoller = { "roller", "kamikaze", "sphere", "bomb" },
+	OverlordBoss = { "boss", "goliath", "overlord", "titan" },
+	MetaDrone = { "metadrone", "goldendrone", "golddrone", "lootdrone" },
+}
+
+local function findCustomTemplate(enemyId: string): Model?
+	if cachedTemplates[enemyId] ~= nil then
+		return cachedTemplates[enemyId]
+	end
+
+	local keywords = KEYWORD_MAPPINGS[enemyId]
+	if not keywords then
+		cachedTemplates[enemyId] = nil
+		return nil
+	end
+
+	local function matches(name: string): boolean
+		local lower = string.lower(name)
+		for _, kw in ipairs(keywords) do
+			if string.find(lower, kw, 1, true) then
+				return true
+			end
+		end
+		return false
+	end
+
+	-- Scan containers: ReplicatedStorage, ServerStorage, Workspace (excluding ActiveEnemies)
+	local containers = { ReplicatedStorage, ServerStorage, Workspace }
+	for _, container in ipairs(containers) do
+		for _, desc in ipairs(container:GetDescendants()) do
+			if desc:IsA("Model") and not desc:FindFirstAncestor("ActiveEnemies") and matches(desc.Name) then
+				print(string.format("[EnemyService] Custom 3D Model detected for '%s': %s (%s)", enemyId, desc.Name, desc:GetFullName()))
+				cachedTemplates[enemyId] = desc
+				return desc
+			end
+		end
+	end
+
+	cachedTemplates[enemyId] = nil
+	return nil
+end
+
+local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: boolean): BillboardGui
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "HealthUI"
+	billboard.Adornee = adornee
+	billboard.Size = UDim2.new(0, 70, 0, 8)
+	billboard.StudsOffset = Vector3.new(0, heightOffset + 1.2, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = adornee
+
+	local bg = Instance.new("Frame")
+	bg.Name = "BG"
+	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	bg.BorderSizePixel = 0
+	bg.Parent = billboard
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.5, 0)
+	corner.Parent = bg
+
+	local bar = Instance.new("Frame")
+	bar.Name = "Bar"
+	bar.Size = UDim2.new(1, 0, 1, 0)
+	bar.BackgroundColor3 = if isBoss then Color3.fromRGB(255, 50, 50) else Color3.fromRGB(80, 255, 120)
+	bar.BorderSizePixel = 0
+	bar.Parent = bg
+
+	local barCorner = Instance.new("UICorner")
+	barCorner.CornerRadius = UDim.new(0.5, 0)
+	barCorner.Parent = bar
+
+	return billboard
+end
+
 local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart)
+	local customTemplate = findCustomTemplate(config.id)
+
+	if customTemplate then
+		-- Clone the recognized custom 3D model
+		local model = customTemplate:Clone()
+		model.Name = config.name
+
+		local root = model.PrimaryPart
+		if not root then
+			root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		end
+
+		if not root then
+			-- Create a root part and weld everything to it
+			root = Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Size = config.size
+			root.Transparency = 1
+			root.CanCollide = false
+			root.Anchored = false
+			root.CFrame = CFrame.new(spawnPos)
+			root.Parent = model
+			model.PrimaryPart = root
+
+			for _, desc in ipairs(model:GetDescendants()) do
+				if desc:IsA("BasePart") and desc ~= root then
+					desc.CanCollide = false
+					desc.Massless = true
+					desc.Anchored = false
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = root
+					w.Part1 = desc
+					w.Parent = root
+				end
+			end
+		else
+			model.PrimaryPart = root
+			root.CanCollide = false
+			root.Anchored = false
+			for _, desc in ipairs(model:GetDescendants()) do
+				if desc:IsA("BasePart") and desc ~= root then
+					desc.CanCollide = false
+					desc.Massless = true
+					desc.Anchored = false
+				end
+			end
+		end
+
+		model:PivotTo(CFrame.new(spawnPos))
+		createHealthUI(root, config.size.Y * 0.7, config.isBoss)
+		model.Parent = getEnemiesFolder()
+
+		return model, root
+	end
+
+	-- Fallback procedural neon mecha model
 	local model = Instance.new("Model")
 	model.Name = config.name
 
@@ -75,36 +215,7 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 	weld.Part1 = core
 	weld.Parent = root
 
-	-- Health Bar Billboard
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "HealthUI"
-	billboard.Adornee = root
-	billboard.Size = UDim2.new(0, 70, 0, 8)
-	billboard.StudsOffset = Vector3.new(0, config.size.Y * 0.7 + 1.2, 0)
-	billboard.AlwaysOnTop = true
-	billboard.Parent = root
-
-	local bg = Instance.new("Frame")
-	bg.Name = "BG"
-	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	bg.BorderSizePixel = 0
-	bg.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.5, 0)
-	corner.Parent = bg
-
-	local bar = Instance.new("Frame")
-	bar.Name = "Bar"
-	bar.Size = UDim2.new(1, 0, 1, 0)
-	bar.BackgroundColor3 = if config.isBoss then Color3.fromRGB(255, 50, 50) else Color3.fromRGB(80, 255, 120)
-	bar.BorderSizePixel = 0
-	bar.Parent = bg
-
-	local barCorner = Instance.new("UICorner")
-	barCorner.CornerRadius = UDim.new(0.5, 0)
-	barCorner.Parent = bar
+	createHealthUI(root, config.size.Y * 0.7, config.isBoss)
 
 	model.PrimaryPart = root
 	model.Parent = getEnemiesFolder()
