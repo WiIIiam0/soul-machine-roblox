@@ -113,19 +113,19 @@ end
 
 local function getEnemyFixedY(enemyId: string, sizeY: number): number
 	if enemyId == "ScoutDrone" then
-		return 3.2
+		return 2.4
 	elseif enemyId == "MetaDrone" then
-		return 3.6
+		return 2.6
 	elseif enemyId == "KamikazeRoller" then
-		return 1.3
+		return 0.95
 	elseif enemyId == "OverlordBoss" then
-		return 4.5
+		return 3.6
 	elseif enemyId == "SniperBot" then
-		return 2.1
+		return 1.65
 	elseif enemyId == "AssaultMecha" then
-		return 2.25
+		return 1.65
 	elseif enemyId == "HeavyJuggernaut" then
-		return 2.7
+		return 2.25
 	end
 	return sizeY * 0.5 + 0.05
 end
@@ -186,13 +186,13 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 	local id = config.id
 
 	if id == "ScoutDrone" then
-		root.Size = Vector3.new(2.0, 1.4, 2.0)
+		root.Size = Vector3.new(1.8, 1.2, 1.8)
 		root.Color = Color3.fromRGB(35, 40, 50)
 
 		local eye = Instance.new("Part")
 		eye.Name = "Eye"
-		eye.Size = Vector3.new(0.8, 0.5, 0.6)
-		eye.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0, -1.0))
+		eye.Size = Vector3.new(0.6, 0.4, 0.5)
+		eye.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0, -0.85))
 		eye.Color = Color3.fromRGB(255, 30, 40)
 		eye.Material = Enum.Material.Neon
 		eye.CanCollide = false
@@ -201,8 +201,8 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 
 		local wingL = Instance.new("Part")
 		wingL.Name = "WingL"
-		wingL.Size = Vector3.new(1.0, 0.2, 1.4)
-		wingL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-1.4, 0.1, 0))
+		wingL.Size = Vector3.new(0.8, 0.15, 1.2)
+		wingL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-1.1, 0.1, 0))
 		wingL.Color = Color3.fromRGB(255, 50, 60)
 		wingL.Material = Enum.Material.Neon
 		wingL.CanCollide = false
@@ -211,8 +211,8 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 
 		local wingR = Instance.new("Part")
 		wingR.Name = "WingR"
-		wingR.Size = Vector3.new(1.0, 0.2, 1.4)
-		wingR.CFrame = CFrame.new(centeredSpawn + Vector3.new(1.4, 0.1, 0))
+		wingR.Size = Vector3.new(0.8, 0.15, 1.2)
+		wingR.CFrame = CFrame.new(centeredSpawn + Vector3.new(1.1, 0.1, 0))
 		wingR.Color = Color3.fromRGB(255, 50, 60)
 		wingR.Material = Enum.Material.Neon
 		wingR.CanCollide = false
@@ -220,13 +220,13 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 		wingR.Parent = model
 
 	elseif id == "AssaultMecha" then
-		root.Size = Vector3.new(2.6, 3.6, 2.2)
+		root.Size = Vector3.new(2.2, 3.0, 1.8)
 		root.Color = Color3.fromRGB(45, 50, 62)
 
 		local visor = Instance.new("Part")
 		visor.Name = "Visor"
-		visor.Size = Vector3.new(1.8, 0.6, 0.6)
-		visor.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 1.1, -1.0))
+		visor.Size = Vector3.new(1.4, 0.5, 0.5)
+		visor.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.9, -0.85))
 		visor.Color = Color3.fromRGB(255, 130, 20)
 		visor.Material = Enum.Material.Neon
 		visor.CanCollide = false
@@ -235,8 +235,8 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 
 		local core = Instance.new("Part")
 		core.Name = "Core"
-		core.Size = Vector3.new(1.2, 1.2, 0.4)
-		core.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.1, -1.1))
+		core.Size = Vector3.new(1.0, 1.0, 0.3)
+		core.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.1, -0.9))
 		core.Color = Color3.fromRGB(255, 80, 20)
 		core.Material = Enum.Material.Neon
 		core.CanCollide = false
@@ -245,8 +245,8 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 
 		local gunL = Instance.new("Part")
 		gunL.Name = "GunL"
-		gunL.Size = Vector3.new(0.5, 0.5, 2.4)
-		gunL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-1.7, 0.6, -0.6))
+		gunL.Size = Vector3.new(0.4, 0.4, 2.0)
+		gunL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-1.4, 0.5, -0.5))
 		gunL.Color = Color3.fromRGB(20, 22, 28)
 		gunL.Material = Enum.Material.Metal
 		gunL.CanCollide = false
@@ -255,9 +255,13 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 
 		local gunR = Instance.new("Part")
 		gunR.Name = "GunR"
-		gunR.Size = Vector3.new(0.5, 0.5, 2.4)
-		gunR.CFrame = CFrame.new(centeredSpawn + Vector3.new(1.7, 0.6, -0.6))
+		gunR.Size = Vector3.new(0.4, 0.4, 2.0)
+		gunR.CFrame = CFrame.new(centeredSpawn + Vector3.new(1.4, 0.5, -0.5))
 		gunR.Color = Color3.fromRGB(20, 22, 28)
+		gunR.Material = Enum.Material.Metal
+		gunR.CanCollide = false
+		gunR.Anchored = true
+		gunR.Parent = model
 		gunR.Material = Enum.Material.Metal
 		gunR.CanCollide = false
 		gunR.Anchored = true
@@ -412,30 +416,7 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 		local model = customTemplate:Clone()
 		model.Name = config.name
 
-		local root = model.PrimaryPart
-		if not root then
-			root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
-		end
-
-		local fixedY = getEnemyFixedY(config.id, config.size.Y)
-		local centeredSpawn = Vector3.new(spawnPos.X, fixedY, spawnPos.Z)
-
-		if not root then
-			root = Instance.new("Part")
-			root.Name = "HumanoidRootPart"
-			root.Size = config.size
-			root.Transparency = 1
-			root.CanCollide = false
-			root.Anchored = true
-			root.CFrame = CFrame.new(centeredSpawn)
-			root.Parent = model
-			model.PrimaryPart = root
-		else
-			model.PrimaryPart = root
-			root.CanCollide = false
-			root.Anchored = true
-		end
-
+		-- Anchor all parts immediately
 		for _, desc in ipairs(model:GetDescendants()) do
 			if desc:IsA("BasePart") then
 				desc.CanCollide = false
@@ -443,8 +424,47 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 			end
 		end
 
+		local root = model.PrimaryPart
+		if not root then
+			root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		end
+		if not root then
+			root = model:FindFirstChildWhichIsA("BasePart")
+		end
+
+		if root then
+			model.PrimaryPart = root
+		else
+			local cf, sz = model:GetBoundingBox()
+			root = Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Size = sz
+			root.CFrame = cf
+			root.Transparency = 1
+			root.CanCollide = false
+			root.Anchored = true
+			root.Parent = model
+			model.PrimaryPart = root
+		end
+
+		-- CRITICAL: Auto-scale the imported FBX down to match config.size!
+		-- Unity FBX meshes are often 10x-20x too big in Roblox without scaling
+		local rawExtents = model:GetExtentsSize()
+		local maxRaw = math.max(rawExtents.X, rawExtents.Y, rawExtents.Z)
+		local targetMax = math.max(config.size.X, config.size.Y, config.size.Z)
+
+		if maxRaw > 0.05 and targetMax > 0.05 then
+			local scaleRatio = targetMax / maxRaw
+			model:ScaleTo(scaleRatio)
+			print(string.format("[EnemyService] Scaled '%s' model by %.4f (from %.1f to %.1f studs)", config.id, scaleRatio, maxRaw, targetMax))
+		end
+
+		local scaledExtents = model:GetExtentsSize()
+		local fixedY = if config.id == "ScoutDrone" or config.id == "MetaDrone" then 2.4 else (scaledExtents.Y * 0.5 + 0.05)
+		local centeredSpawn = Vector3.new(spawnPos.X, fixedY, spawnPos.Z)
+
 		model:PivotTo(CFrame.new(centeredSpawn))
-		createHealthUI(root, config.size.Y * 0.7, config.isBoss)
+		createHealthUI(root, scaledExtents.Y * 0.7, config.isBoss)
 		model.Parent = getEnemiesFolder()
 
 		return model, root
