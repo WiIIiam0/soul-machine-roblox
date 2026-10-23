@@ -38,7 +38,7 @@ export type PassiveDefinition = {
 
 local PassivesData = {}
 
-PassivesData.TRIGGER_INFO: { [TriggerCondition]: { label: string, baseThreshold: number } } = {
+local TRIGGER_INFO: { [TriggerCondition]: { label: string, baseThreshold: number } } = {
 	OnEnemyKilled = { label = "Tous les %d ennemis détruits", baseThreshold = 8 },
 	OnDamageDealt = { label = "Tous les %d dégâts infligés", baseThreshold = 140 },
 	OnDamageTaken = { label = "Tous les %d dégâts subis", baseThreshold = 30 },
@@ -50,8 +50,9 @@ PassivesData.TRIGGER_INFO: { [TriggerCondition]: { label: string, baseThreshold:
 	OnOverdrive = { label = "À chaque déclenchement d'Overdrive", baseThreshold = 1 },
 	OnGainXP = { label = "Tous les %d points d'XP récoltés", baseThreshold = 35 },
 }
+PassivesData.TRIGGER_INFO = TRIGGER_INFO
 
-PassivesData.EFFECT_INFO: { [PassiveEffect]: { label: string, basePower: number } } = {
+local EFFECT_INFO: { [PassiveEffect]: { label: string, basePower: number } } = {
 	Heal = { label = "Régénère %.0f PV", basePower = 12 },
 	GainMaxHP = { label = "+%.0f PV Max permanent", basePower = 3 },
 	GainStatDamage = { label = "+%.0f%% Dégâts permanent", basePower = 0.04 },
@@ -63,8 +64,9 @@ PassivesData.EFFECT_INFO: { [PassiveEffect]: { label: string, basePower: number 
 	ChargeOverdrive = { label = "Recharge l'Overdrive de %.0f%%", basePower = 15 },
 	GainXP = { label = "Octroie +%.0f XP bonus", basePower = 18 },
 }
+PassivesData.EFFECT_INFO = EFFECT_INFO
 
-PassivesData.PREMADE_PASSIVES: { PassiveDefinition } = {
+local PREMADE_PASSIVES: { PassiveDefinition } = {
 	{
 		id = "VampiricProtocol",
 		name = "Protocole Vampirique",
@@ -146,6 +148,7 @@ PassivesData.PREMADE_PASSIVES: { PassiveDefinition } = {
 		icon = "rbxassetid://10709791281",
 	},
 }
+PassivesData.PREMADE_PASSIVES = PREMADE_PASSIVES
 
 function PassivesData.GenerateProceduralPassive(seed: number): PassiveDefinition
 	local rng = Random.new(seed)

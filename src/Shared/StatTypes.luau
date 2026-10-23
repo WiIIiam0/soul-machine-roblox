@@ -28,7 +28,7 @@ export type PlayerStats = {
 
 local StatTypes = {}
 
-StatTypes.DEFAULT_STATS: PlayerStats = {
+local DEFAULT_STATS: PlayerStats = {
 	MaxHP = 100,
 	Speed = 22,               -- Default Roblox Humanoid WalkSpeed is 16, 22 gives dynamic mecha feel
 	DamageMultiplier = 1.0,   -- 100%
@@ -40,8 +40,9 @@ StatTypes.DEFAULT_STATS: PlayerStats = {
 	BurnDamage = 3.0,         -- 3 damage per burn tick
 	RangeMultiplier = 1.0,    -- 100%
 }
+StatTypes.DEFAULT_STATS = DEFAULT_STATS
 
-StatTypes.STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
+local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
 	MaxHP = {
 		name = "Points de Vie Max",
 		icon = "rbxassetid://10709791437",
@@ -113,6 +114,7 @@ StatTypes.STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus
 		desc = "Permet de verrouiller et toucher les ennemis à plus grande distance.",
 	},
 }
+StatTypes.STAT_CONFIG = STAT_CONFIG
 
 function StatTypes.CalculateDamageAfterArmor(rawDamage: number, armor: number): number
 	if armor <= 0 then

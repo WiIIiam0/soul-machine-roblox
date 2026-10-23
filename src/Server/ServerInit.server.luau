@@ -7,6 +7,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
+-- 1. Initialize Network Remotes FIRST so they are available immediately
+Remotes.Init()
+
 local ArenaBuilder = require(script.Parent.ArenaBuilder)
 local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
 local WeaponService = require(script.Parent.WeaponService)
@@ -15,9 +18,6 @@ local PassiveService = require(script.Parent.PassiveService)
 local EnemyDirector = require(script.Parent.EnemyDirector)
 
 print("[SoulMachine / BrotatoRoblox] Initializing Server Systems...")
-
--- 1. Initialize Network Remotes
-Remotes.Init()
 
 -- 2. Build Battle Arena
 ArenaBuilder.BuildArena()
@@ -29,7 +29,7 @@ local function setupPlayer(player: Player)
 	XPService.InitPlayer(player)
 	PassiveService.InitPlayer(player)
 
-	player.CharacterAdded:Connect(function(character)
+	local function setupCharacter(character: Model)
 		local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
 		local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
 
@@ -39,22 +39,16 @@ local function setupPlayer(player: Player)
 				humanoid.MaxHealth = pData.maxHP
 				humanoid.Health = pData.currentHP
 				humanoid.WalkSpeed = pData.currentStats.Speed
-				humanoid.AutoRotate = true
 			end
 
-			-- Spawn at arena center
+			-- Spawn at arena center safely above spawn pad
 			hrp.CFrame = CFrame.new(0, 4, 0)
 		end
-	end)
+	end
 
+	player.CharacterAdded:Connect(setupCharacter)
 	if player.Character then
-		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			local pData = PlayerStatsManager.GetPlayerData(player)
-			if pData then
-				humanoid.WalkSpeed = pData.currentStats.Speed
-			end
-		end
+		task.spawn(setupCharacter, player.Character)
 	end
 end
 

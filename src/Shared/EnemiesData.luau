@@ -25,7 +25,7 @@ export type EnemyConfig = {
 
 local EnemiesData = {}
 
-EnemiesData.TYPES: { [string]: EnemyConfig } = {
+local TYPES: { [string]: EnemyConfig } = {
 	ScoutDrone = {
 		id = "ScoutDrone",
 		name = "Drone Éclaireur",
@@ -166,6 +166,7 @@ EnemiesData.TYPES: { [string]: EnemyConfig } = {
 		size = Vector3.new(3, 3, 3),
 	},
 }
+EnemiesData.TYPES = TYPES
 
 function EnemiesData.GetEnemy(id: string): EnemyConfig?
 	return EnemiesData.TYPES[id]

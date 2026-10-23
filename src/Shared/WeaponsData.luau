@@ -33,7 +33,7 @@ export type WeaponDefinition = {
 
 local WeaponsData = {}
 
-WeaponsData.WEAPONS: { [string]: WeaponDefinition } = {
+local WEAPONS: { [string]: WeaponDefinition } = {
 	StarterGun = {
 		id = "StarterGun",
 		name = "Canon Impulsion",
@@ -200,6 +200,7 @@ WeaponsData.WEAPONS: { [string]: WeaponDefinition } = {
 		},
 	},
 }
+WeaponsData.WEAPONS = WEAPONS
 
 function WeaponsData.GetWeapon(id: string): WeaponDefinition?
 	return WeaponsData.WEAPONS[id]
