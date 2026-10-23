@@ -204,7 +204,7 @@ odBtn.TextSize = 11
 odBtn.Text = "REACTEUR OVERDRIVE : 0%"
 odBtn.Parent = odContainer
 
-odBtn.MouseButton1Click:Connect(function()
+odBtn.Activated:Connect(function()
 	Remotes.GetEvent("TriggerOverdrive"):FireServer()
 end)
 

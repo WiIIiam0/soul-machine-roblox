@@ -1,5 +1,5 @@
 --!strict
--- TopDownCamera.client.luau: Pure Top-Down camera, free mouse aiming, and drift-free movement controller
+-- TopDownCamera.client.luau: Top-Down camera, auto-aim targeting nearest enemies, and drift-free movement controller
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -18,7 +18,7 @@ local CAMERA_OFFSET = Vector3.new(0, 42, 28)
 
 camera.CameraType = Enum.CameraType.Scriptable
 
--- 1. Free and visible mouse cursor (prevents ShiftLock center dot)
+-- 1. Free and visible mouse cursor for clicking UI
 UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 UserInputService.MouseIconEnabled = true
 
@@ -44,7 +44,92 @@ task.spawn(function()
 	end
 end)
 
--- 3. Character Rotation Setup (AlignOrientation: smooth torque, zero physics conflict)
+-- 3. Target Lock-On Indicator UI
+local targetBillboard = Instance.new("BillboardGui")
+targetBillboard.Name = "TargetLockReticle"
+targetBillboard.Size = UDim2.new(0, 44, 0, 44)
+targetBillboard.AlwaysOnTop = true
+targetBillboard.Enabled = false
+targetBillboard.Parent = player:WaitForChild("PlayerGui")
+
+local reticleCircle = Instance.new("Frame")
+reticleCircle.Name = "ReticleCircle"
+reticleCircle.Size = UDim2.new(1, 0, 1, 0)
+reticleCircle.BackgroundTransparency = 1
+reticleCircle.Parent = targetBillboard
+
+local reticleStroke = Instance.new("UIStroke")
+reticleStroke.Color = Color3.fromRGB(255, 60, 90)
+reticleStroke.Thickness = 2
+reticleStroke.Transparency = 0.15
+reticleStroke.Parent = reticleCircle
+
+local reticleCorner = Instance.new("UICorner")
+reticleCorner.CornerRadius = UDim.new(0.5, 0)
+reticleCorner.Parent = reticleCircle
+
+local centerDot = Instance.new("Frame")
+centerDot.Name = "CenterDot"
+centerDot.Size = UDim2.new(0, 6, 0, 6)
+centerDot.Position = UDim2.new(0.5, -3, 0.5, -3)
+centerDot.BackgroundColor3 = Color3.fromRGB(255, 60, 90)
+centerDot.BorderSizePixel = 0
+centerDot.Parent = reticleCircle
+
+local dotCorner = Instance.new("UICorner")
+dotCorner.CornerRadius = UDim.new(0.5, 0)
+dotCorner.Parent = centerDot
+
+local function updateTargetReticle(targetPart: BasePart?)
+	if targetPart and targetPart.Parent then
+		targetBillboard.Adornee = targetPart
+		targetBillboard.Enabled = true
+	else
+		targetBillboard.Enabled = false
+		targetBillboard.Adornee = nil
+	end
+end
+
+-- 4. Mobile Touch Drag Movement (Left Half of Screen)
+local touchMoveDir = Vector3.zero
+local touchStartPos: Vector2? = nil
+local activeTouchInput: InputObject? = nil
+
+UserInputService.TouchStarted:Connect(function(input: InputObject, gameProcessed: boolean)
+	if gameProcessed then return end
+	local pos = input.Position
+	local screenWidth = camera.ViewportSize.X
+	if pos.X < screenWidth * 0.5 and not activeTouchInput then
+		activeTouchInput = input
+		touchStartPos = Vector2.new(pos.X, pos.Y)
+		touchMoveDir = Vector3.zero
+	end
+end)
+
+UserInputService.TouchMoved:Connect(function(input: InputObject, gameProcessed: boolean)
+	if input == activeTouchInput and touchStartPos then
+		local currentPos = Vector2.new(input.Position.X, input.Position.Y)
+		local delta = currentPos - touchStartPos
+		if delta.Magnitude > 14 then
+			local dir = delta.Unit
+			touchMoveDir = Vector3.new(dir.X, 0, dir.Y)
+		else
+			touchMoveDir = Vector3.zero
+		end
+	end
+end)
+
+local function onTouchEnded(input: InputObject)
+	if input == activeTouchInput then
+		activeTouchInput = nil
+		touchStartPos = nil
+		touchMoveDir = Vector3.zero
+	end
+end
+
+UserInputService.TouchEnded:Connect(onTouchEnded)
+
+-- 5. Character Rotation Setup (AlignOrientation: smooth torque, zero physics conflict)
 local function setupCharacter(character: Model)
 	local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
 	local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
@@ -75,7 +160,9 @@ if player.Character then
 end
 player.CharacterAdded:Connect(setupCharacter)
 
--- 4. Movement & Camera Update Loop
+local lastAimDir: Vector3? = nil
+
+-- 6. Movement & Camera Update Loop
 local function onRenderStep(dt: number)
 	local char = player.Character
 	if not char then return end
@@ -110,7 +197,12 @@ local function onRenderStep(dt: number)
 
 	local moveDir = Vector3.new(moveX, 0, moveZ)
 
-	-- Gamepad support with 0.25 deadzone to ignore stick drift
+	-- Mobile Touch Movement
+	if touchMoveDir.Magnitude > 0.05 then
+		moveDir = touchMoveDir
+	end
+
+	-- Gamepad support with 0.25 deadzone
 	local gamepads = UserInputService:GetConnectedGamepads()
 	if #gamepads > 0 then
 		local states = UserInputService:GetGamepadState(gamepads[1])
@@ -131,40 +223,58 @@ local function onRenderStep(dt: number)
 		humanoid:Move(Vector3.zero, false)
 	end
 
-	-- Mouse Aiming
+	-- 7. AUTO-AIM AT CLOSEST ENEMY
 	local alignRot = hrp:FindFirstChild("MechaAimOrientation") :: AlignOrientation?
 	if alignRot then
-		local mousePos = UserInputService:GetMouseLocation()
-		local ray = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
-		local planeY = pPos.Y
+		local closestPart: BasePart? = nil
+		local closestDistSq = 100 * 100 -- 100 studs auto-target range
 
-		local aimDir: Vector3? = nil
-
-		if ray.Direction.Y ~= 0 then
-			local t = (planeY - ray.Origin.Y) / ray.Direction.Y
-			if t > 0 then
-				local hitPoint = ray.Origin + (ray.Direction * t)
-				local toCursor = (hitPoint - pPos)
-				local flatToCursor = Vector3.new(toCursor.X, 0, toCursor.Z)
-				if flatToCursor.Magnitude > 1.2 then
-					aimDir = flatToCursor.Unit
+		local enemiesFolder = Workspace:FindFirstChild("ActiveEnemies")
+		if enemiesFolder then
+			for _, enemyModel in ipairs(enemiesFolder:GetChildren()) do
+				if enemyModel:IsA("Model") then
+					local eRoot = enemyModel.PrimaryPart or enemyModel:FindFirstChild("HumanoidRootPart") :: BasePart?
+					if eRoot and eRoot.Parent then
+						local dx = eRoot.Position.X - pPos.X
+						local dz = eRoot.Position.Z - pPos.Z
+						local dSq = dx * dx + dz * dz
+						if dSq < closestDistSq then
+							closestDistSq = dSq
+							closestPart = eRoot
+						end
+					end
 				end
 			end
 		end
 
-		if not aimDir and moveDir.Magnitude > 0.05 then
-			aimDir = moveDir.Unit
+		local aimDir: Vector3? = nil
+
+		if closestPart then
+			local toEnemy = closestPart.Position - pPos
+			local flatToEnemy = Vector3.new(toEnemy.X, 0, toEnemy.Z)
+			if flatToEnemy.Magnitude > 0.1 then
+				aimDir = flatToEnemy.Unit
+			end
+			updateTargetReticle(closestPart)
+		else
+			updateTargetReticle(nil)
+			if moveDir.Magnitude > 0.05 then
+				aimDir = moveDir.Unit
+			end
 		end
 
 		if aimDir then
+			lastAimDir = aimDir
 			alignRot.CFrame = CFrame.lookAt(Vector3.zero, aimDir)
+		elseif lastAimDir then
+			alignRot.CFrame = CFrame.lookAt(Vector3.zero, lastAimDir)
 		end
 	end
 end
 
 RunService.RenderStepped:Connect(onRenderStep)
 
--- 5. Overdrive Activation (Space, F, or Gamepad Button)
+-- 8. Overdrive Activation (Space, F, or Touch Button)
 local function handleOverdriveAction(actionName: string, inputState: Enum.UserInputState, inputObj: InputObject)
 	if inputState == Enum.UserInputState.Begin then
 		Remotes.GetEvent("TriggerOverdrive"):FireServer()

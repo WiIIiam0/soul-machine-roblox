@@ -78,7 +78,6 @@ local function findCustomTemplate(enemyId: string): Model?
 		return false
 	end
 
-	-- Scan containers: ReplicatedStorage, ServerStorage, Workspace (excluding ActiveEnemies)
 	local containers = { ReplicatedStorage, ServerStorage, Workspace }
 	for _, container in ipairs(containers) do
 		for _, desc in ipairs(container:GetDescendants()) do
@@ -94,11 +93,30 @@ local function findCustomTemplate(enemyId: string): Model?
 	return nil
 end
 
+local function getEnemyFixedY(enemyId: string, sizeY: number): number
+	if enemyId == "ScoutDrone" then
+		return 3.2
+	elseif enemyId == "MetaDrone" then
+		return 3.6
+	elseif enemyId == "KamikazeRoller" then
+		return 1.3
+	elseif enemyId == "OverlordBoss" then
+		return 4.5
+	elseif enemyId == "SniperBot" then
+		return 2.1
+	elseif enemyId == "AssaultMecha" then
+		return 2.25
+	elseif enemyId == "HeavyJuggernaut" then
+		return 2.7
+	end
+	return sizeY * 0.5 + 0.05
+end
+
 local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: boolean): BillboardGui
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "HealthUI"
 	billboard.Adornee = adornee
-	billboard.Size = UDim2.new(0, 70, 0, 8)
+	billboard.Size = if isBoss then UDim2.new(0, 110, 0, 10) else UDim2.new(0, 70, 0, 8)
 	billboard.StudsOffset = Vector3.new(0, heightOffset + 1.2, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Parent = adornee
@@ -106,7 +124,7 @@ local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: b
 	local bg = Instance.new("Frame")
 	bg.Name = "BG"
 	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	bg.BackgroundColor3 = Color3.fromRGB(15, 18, 24)
 	bg.BorderSizePixel = 0
 	bg.Parent = billboard
 
@@ -117,7 +135,7 @@ local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: b
 	local bar = Instance.new("Frame")
 	bar.Name = "Bar"
 	bar.Size = UDim2.new(1, 0, 1, 0)
-	bar.BackgroundColor3 = if isBoss then Color3.fromRGB(255, 50, 50) else Color3.fromRGB(80, 255, 120)
+	bar.BackgroundColor3 = if isBoss then Color3.fromRGB(255, 45, 65) else Color3.fromRGB(80, 255, 120)
 	bar.BorderSizePixel = 0
 	bar.Parent = bg
 
@@ -128,11 +146,251 @@ local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: b
 	return billboard
 end
 
+local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart)
+	local model = Instance.new("Model")
+	model.Name = config.name
+
+	local fixedY = getEnemyFixedY(config.id, config.size.Y)
+	local centeredSpawn = Vector3.new(spawnPos.X, fixedY, spawnPos.Z)
+
+	-- Root Part
+	local root = Instance.new("Part")
+	root.Name = "HumanoidRootPart"
+	root.Size = config.size
+	root.CFrame = CFrame.new(centeredSpawn)
+	root.Color = config.color
+	root.Material = Enum.Material.Metal
+	root.CanCollide = false
+	root.Anchored = true
+	root.Parent = model
+	model.PrimaryPart = root
+
+	local id = config.id
+
+	if id == "ScoutDrone" then
+		root.Size = Vector3.new(2.0, 1.4, 2.0)
+		root.Color = Color3.fromRGB(35, 40, 50)
+
+		local eye = Instance.new("Part")
+		eye.Name = "Eye"
+		eye.Size = Vector3.new(0.8, 0.5, 0.6)
+		eye.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0, -1.0))
+		eye.Color = Color3.fromRGB(255, 30, 40)
+		eye.Material = Enum.Material.Neon
+		eye.CanCollide = false
+		eye.Anchored = true
+		eye.Parent = model
+
+		local wingL = Instance.new("Part")
+		wingL.Name = "WingL"
+		wingL.Size = Vector3.new(1.0, 0.2, 1.4)
+		wingL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-1.4, 0.1, 0))
+		wingL.Color = Color3.fromRGB(255, 50, 60)
+		wingL.Material = Enum.Material.Neon
+		wingL.CanCollide = false
+		wingL.Anchored = true
+		wingL.Parent = model
+
+		local wingR = Instance.new("Part")
+		wingR.Name = "WingR"
+		wingR.Size = Vector3.new(1.0, 0.2, 1.4)
+		wingR.CFrame = CFrame.new(centeredSpawn + Vector3.new(1.4, 0.1, 0))
+		wingR.Color = Color3.fromRGB(255, 50, 60)
+		wingR.Material = Enum.Material.Neon
+		wingR.CanCollide = false
+		wingR.Anchored = true
+		wingR.Parent = model
+
+	elseif id == "AssaultMecha" then
+		root.Size = Vector3.new(2.6, 3.6, 2.2)
+		root.Color = Color3.fromRGB(45, 50, 62)
+
+		local visor = Instance.new("Part")
+		visor.Name = "Visor"
+		visor.Size = Vector3.new(1.8, 0.6, 0.6)
+		visor.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 1.1, -1.0))
+		visor.Color = Color3.fromRGB(255, 130, 20)
+		visor.Material = Enum.Material.Neon
+		visor.CanCollide = false
+		visor.Anchored = true
+		visor.Parent = model
+
+		local core = Instance.new("Part")
+		core.Name = "Core"
+		core.Size = Vector3.new(1.2, 1.2, 0.4)
+		core.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.1, -1.1))
+		core.Color = Color3.fromRGB(255, 80, 20)
+		core.Material = Enum.Material.Neon
+		core.CanCollide = false
+		core.Anchored = true
+		core.Parent = model
+
+		local gunL = Instance.new("Part")
+		gunL.Name = "GunL"
+		gunL.Size = Vector3.new(0.5, 0.5, 2.4)
+		gunL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-1.7, 0.6, -0.6))
+		gunL.Color = Color3.fromRGB(20, 22, 28)
+		gunL.Material = Enum.Material.Metal
+		gunL.CanCollide = false
+		gunL.Anchored = true
+		gunL.Parent = model
+
+		local gunR = Instance.new("Part")
+		gunR.Name = "GunR"
+		gunR.Size = Vector3.new(0.5, 0.5, 2.4)
+		gunR.CFrame = CFrame.new(centeredSpawn + Vector3.new(1.7, 0.6, -0.6))
+		gunR.Color = Color3.fromRGB(20, 22, 28)
+		gunR.Material = Enum.Material.Metal
+		gunR.CanCollide = false
+		gunR.Anchored = true
+		gunR.Parent = model
+
+	elseif id == "SniperBot" then
+		root.Size = Vector3.new(2.2, 3.8, 2.2)
+		root.Color = Color3.fromRGB(38, 30, 52)
+
+		local barrel = Instance.new("Part")
+		barrel.Name = "LaserBarrel"
+		barrel.Size = Vector3.new(0.4, 0.4, 3.6)
+		barrel.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.8, -1.6))
+		barrel.Color = Color3.fromRGB(210, 40, 255)
+		barrel.Material = Enum.Material.Neon
+		barrel.CanCollide = false
+		barrel.Anchored = true
+		barrel.Parent = model
+
+		local eye = Instance.new("Part")
+		eye.Name = "SniperEye"
+		eye.Size = Vector3.new(0.8, 0.8, 0.6)
+		eye.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 1.3, -0.9))
+		eye.Color = Color3.fromRGB(230, 80, 255)
+		eye.Material = Enum.Material.Neon
+		eye.CanCollide = false
+		eye.Anchored = true
+		eye.Parent = model
+
+	elseif id == "HeavyJuggernaut" then
+		root.Size = Vector3.new(4.8, 5.0, 4.8)
+		root.Color = Color3.fromRGB(28, 30, 38)
+
+		local shield = Instance.new("Part")
+		shield.Name = "Shield"
+		shield.Size = Vector3.new(5.0, 3.8, 0.8)
+		shield.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0, -2.4))
+		shield.Color = Color3.fromRGB(42, 48, 58)
+		shield.Material = Enum.Material.DiamondPlate
+		shield.CanCollide = false
+		shield.Anchored = true
+		shield.Parent = model
+
+		local core = Instance.new("Part")
+		core.Name = "PowerCore"
+		core.Size = Vector3.new(2.0, 2.0, 0.8)
+		core.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.4, -2.5))
+		core.Color = Color3.fromRGB(255, 40, 60)
+		core.Material = Enum.Material.Neon
+		core.CanCollide = false
+		core.Anchored = true
+		core.Parent = model
+
+	elseif id == "KamikazeRoller" then
+		root.Size = Vector3.new(2.6, 2.6, 2.6)
+		root.Shape = Enum.PartType.Ball
+		root.Color = Color3.fromRGB(220, 25, 25)
+		root.Material = Enum.Material.Metal
+
+		local pulse = Instance.new("Part")
+		pulse.Name = "PulseCore"
+		pulse.Size = Vector3.new(1.6, 1.6, 1.6)
+		pulse.Shape = Enum.PartType.Ball
+		pulse.CFrame = CFrame.new(centeredSpawn)
+		pulse.Color = Color3.fromRGB(255, 220, 30)
+		pulse.Material = Enum.Material.Neon
+		pulse.CanCollide = false
+		pulse.Anchored = true
+		pulse.Parent = model
+
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(255, 50, 20)
+		light.Brightness = 3
+		light.Range = 12
+		light.Parent = pulse
+
+	elseif id == "OverlordBoss" then
+		root.Size = Vector3.new(7.6, 8.2, 7.6)
+		root.Color = Color3.fromRGB(16, 18, 25)
+
+		local bossCore = Instance.new("Part")
+		bossCore.Name = "BossCore"
+		bossCore.Size = Vector3.new(3.4, 3.4, 1.6)
+		bossCore.CFrame = CFrame.new(centeredSpawn + Vector3.new(0, 0.5, -3.6))
+		bossCore.Color = Color3.fromRGB(255, 0, 80)
+		bossCore.Material = Enum.Material.Neon
+		bossCore.CanCollide = false
+		bossCore.Anchored = true
+		bossCore.Parent = model
+
+		local cannonL = Instance.new("Part")
+		cannonL.Name = "CannonL"
+		cannonL.Size = Vector3.new(1.2, 1.2, 5.0)
+		cannonL.CFrame = CFrame.new(centeredSpawn + Vector3.new(-4.0, 1.8, -1.5))
+		cannonL.Color = Color3.fromRGB(30, 35, 45)
+		cannonL.Material = Enum.Material.Metal
+		cannonL.CanCollide = false
+		cannonL.Anchored = true
+		cannonL.Parent = model
+
+		local cannonR = Instance.new("Part")
+		cannonR.Name = "CannonR"
+		cannonR.Size = Vector3.new(1.2, 1.2, 5.0)
+		cannonR.CFrame = CFrame.new(centeredSpawn + Vector3.new(4.0, 1.8, -1.5))
+		cannonR.Color = Color3.fromRGB(30, 35, 45)
+		cannonR.Material = Enum.Material.Metal
+		cannonR.CanCollide = false
+		cannonR.Anchored = true
+		cannonR.Parent = model
+
+		local bLight = Instance.new("PointLight")
+		bLight.Color = Color3.fromRGB(255, 20, 60)
+		bLight.Brightness = 4
+		bLight.Range = 28
+		bLight.Parent = bossCore
+
+	elseif id == "MetaDrone" then
+		root.Size = Vector3.new(2.8, 2.8, 2.8)
+		root.Shape = Enum.PartType.Ball
+		root.Color = Color3.fromRGB(255, 215, 0)
+		root.Material = Enum.Material.Neon
+
+		local ring = Instance.new("Part")
+		ring.Name = "GoldRing"
+		ring.Size = Vector3.new(4.2, 0.25, 4.2)
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Orientation = Vector3.new(0, 0, 90)
+		ring.CFrame = CFrame.new(centeredSpawn)
+		ring.Color = Color3.fromRGB(255, 180, 0)
+		ring.Material = Enum.Material.Neon
+		ring.CanCollide = false
+		ring.Anchored = true
+		ring.Parent = model
+
+		local mLight = Instance.new("PointLight")
+		mLight.Color = Color3.fromRGB(255, 220, 50)
+		mLight.Brightness = 3
+		mLight.Range = 16
+		mLight.Parent = root
+	end
+
+	createHealthUI(root, config.size.Y * 0.7, config.isBoss)
+	model.Parent = getEnemiesFolder()
+
+	return model, root
+end
+
 local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart)
 	local customTemplate = findCustomTemplate(config.id)
 
 	if customTemplate then
-		-- Clone the recognized custom 3D model
 		local model = customTemplate:Clone()
 		model.Name = config.name
 
@@ -141,86 +399,40 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 			root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
 		end
 
+		local fixedY = getEnemyFixedY(config.id, config.size.Y)
+		local centeredSpawn = Vector3.new(spawnPos.X, fixedY, spawnPos.Z)
+
 		if not root then
-			-- Create a root part and weld everything to it
 			root = Instance.new("Part")
 			root.Name = "HumanoidRootPart"
 			root.Size = config.size
 			root.Transparency = 1
 			root.CanCollide = false
-			root.Anchored = false
-			root.CFrame = CFrame.new(spawnPos)
+			root.Anchored = true
+			root.CFrame = CFrame.new(centeredSpawn)
 			root.Parent = model
 			model.PrimaryPart = root
-
-			for _, desc in ipairs(model:GetDescendants()) do
-				if desc:IsA("BasePart") and desc ~= root then
-					desc.CanCollide = false
-					desc.Massless = true
-					desc.Anchored = false
-					local w = Instance.new("WeldConstraint")
-					w.Part0 = root
-					w.Part1 = desc
-					w.Parent = root
-				end
-			end
 		else
 			model.PrimaryPart = root
 			root.CanCollide = false
-			root.Anchored = false
-			for _, desc in ipairs(model:GetDescendants()) do
-				if desc:IsA("BasePart") and desc ~= root then
-					desc.CanCollide = false
-					desc.Massless = true
-					desc.Anchored = false
-				end
+			root.Anchored = true
+		end
+
+		for _, desc in ipairs(model:GetDescendants()) do
+			if desc:IsA("BasePart") then
+				desc.CanCollide = false
+				desc.Anchored = true
 			end
 		end
 
-		model:PivotTo(CFrame.new(spawnPos))
+		model:PivotTo(CFrame.new(centeredSpawn))
 		createHealthUI(root, config.size.Y * 0.7, config.isBoss)
 		model.Parent = getEnemiesFolder()
 
 		return model, root
 	end
 
-	-- Fallback procedural neon mecha model
-	local model = Instance.new("Model")
-	model.Name = config.name
-
-	local root = Instance.new("Part")
-	root.Name = "HumanoidRootPart"
-	root.Size = config.size
-	root.Position = spawnPos
-	root.Color = config.color
-	root.Material = Enum.Material.SmoothPlastic
-	root.CanCollide = false
-	root.Anchored = false
-	root.Massless = false
-	root.CustomPhysicalProperties = PhysicalProperties.new(1, 0, 0, 0, 0)
-	root.Parent = model
-
-	-- Visual Mecha Core (Neon)
-	local core = Instance.new("Part")
-	core.Name = "Core"
-	core.Size = config.size * 0.6
-	core.Position = spawnPos
-	core.Color = if config.isBoss then Color3.fromRGB(255, 0, 80) else (if config.isMetaEnemy then Color3.fromRGB(255, 230, 0) else Color3.fromRGB(0, 255, 220))
-	core.Material = Enum.Material.Neon
-	core.CanCollide = false
-	core.Parent = model
-
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = root
-	weld.Part1 = core
-	weld.Parent = root
-
-	createHealthUI(root, config.size.Y * 0.7, config.isBoss)
-
-	model.PrimaryPart = root
-	model.Parent = getEnemiesFolder()
-
-	return model, root
+	return buildProceduralEnemy(config, spawnPos)
 end
 
 function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3): ActiveEnemy?
@@ -257,8 +469,10 @@ function EnemyService.GetClosestEnemy(fromPos: Vector3, maxRange: number): Activ
 
 	for _, enemy in pairs(activeEnemies) do
 		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
-			local distSq = (enemy.rootPart.Position - fromPos).Magnitude
-			distSq = distSq * distSq
+			local ePos = enemy.rootPart.Position
+			local dx = ePos.X - fromPos.X
+			local dz = ePos.Z - fromPos.Z
+			local distSq = dx * dx + dz * dz
 			if distSq < closestDistSq then
 				closestDistSq = distSq
 				closest = enemy
@@ -275,8 +489,10 @@ function EnemyService.GetEnemiesInRange(fromPos: Vector3, radius: number): { Act
 
 	for _, enemy in pairs(activeEnemies) do
 		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
-			local d = (enemy.rootPart.Position - fromPos).Magnitude
-			if (d * d) <= rSq then
+			local ePos = enemy.rootPart.Position
+			local dx = ePos.X - fromPos.X
+			local dz = ePos.Z - fromPos.Z
+			if (dx * dx + dz * dz) <= rSq then
 				table.insert(result, enemy)
 			end
 		end
@@ -294,9 +510,12 @@ function EnemyService.TakeDamage(enemy: ActiveEnemy, amount: number, isCrit: boo
 	if enemy.rootPart and enemy.rootPart.Parent then
 		local billboard = enemy.rootPart:FindFirstChild("HealthUI")
 		if billboard then
-			local bar = billboard:FindFirstChild("BG"):FindFirstChild("Bar") :: Frame?
-			if bar then
-				bar.Size = UDim2.new(math.clamp(enemy.currentHealth / enemy.maxHealth, 0, 1), 0, 1, 0)
+			local bg = billboard:FindFirstChild("BG")
+			if bg then
+				local bar = bg:FindFirstChild("Bar") :: Frame?
+				if bar then
+					bar.Size = UDim2.new(math.clamp(enemy.currentHealth / enemy.maxHealth, 0, 1), 0, 1, 0)
+				end
 			end
 		end
 
@@ -387,7 +606,7 @@ local function getNearestPlayer(pos: Vector3): (Player?, Vector3?, number)
 	return nearest, nearestPos, minDistance
 end
 
--- Heartbeat AI loop
+-- Heartbeat AI loop (Kinematic simulation with Anchored parts)
 RunService.Heartbeat:Connect(function(dt: number)
 	local now = os.clock()
 
@@ -423,40 +642,45 @@ RunService.Heartbeat:Connect(function(dt: number)
 		enemy.targetPlayer = targetPlayer
 
 		if not targetPos or not targetPlayer then
-			-- No players, stay idle
-			root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
 			continue
 		end
 
 		local behavior = enemy.config.behavior
 		local moveDir = Vector3.zero
+		local flatDir = Vector3.zero
 
-		if behavior == "CHASE" or behavior == "BOSS" then
-			-- Walk towards player
-			local toTarget = (targetPos - ePos)
-			toTarget = Vector3.new(toTarget.X, 0, toTarget.Z)
-			if toTarget.Magnitude > 0.1 then
-				moveDir = toTarget.Unit
-				root.CFrame = CFrame.lookAt(ePos, ePos + moveDir)
+		local toTarget = (targetPos - ePos)
+		local flatDist = Vector2.new(toTarget.X, toTarget.Z).Magnitude
+		if flatDist > 0.05 then
+			flatDir = Vector3.new(toTarget.X, 0, toTarget.Z).Unit
+		end
+
+		if behavior == "CHASE" then
+			moveDir = flatDir
+
+		elseif behavior == "BOSS" then
+			moveDir = flatDir
+
+			-- Boss triple plasma spread attack
+			if now - enemy.lastShootTime >= enemy.config.shootCooldown and flatDist <= enemy.config.shootRange then
+				enemy.lastShootTime = now
+				local ProjectileService = require(script.Parent.ProjectileService)
+				local baseAngle = math.atan2(flatDir.Z, flatDir.X)
+				for _, angleOffset in ipairs({ -0.22, 0, 0.22 }) do
+					local angle = baseAngle + angleOffset
+					local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
+					ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 2.5, 0), dir, enemy.config.bulletDamage, enemy.config.bulletSpeed)
+				end
 			end
 
 		elseif behavior == "KITE_SHOOT" then
-			local toTarget = (targetPos - ePos)
-			local flatDist = Vector3.new(toTarget.X, 0, toTarget.Z).Magnitude
-			local flatDir = Vector3.new(toTarget.X, 0, toTarget.Z).Unit
-
 			if flatDist < 30 then
-				-- Flee
 				moveDir = -flatDir
 			elseif flatDist > 55 then
-				-- Chase
 				moveDir = flatDir
 			else
-				-- Strafe
 				moveDir = Vector3.new(-flatDir.Z, 0, flatDir.X)
 			end
-
-			root.CFrame = CFrame.lookAt(ePos, ePos + flatDir)
 
 			-- Shoot enemy projectile
 			if now - enemy.lastShootTime >= enemy.config.shootCooldown then
@@ -466,16 +690,10 @@ RunService.Heartbeat:Connect(function(dt: number)
 			end
 
 		elseif behavior == "KAMIKAZE" then
-			local toTarget = (targetPos - ePos)
-			toTarget = Vector3.new(toTarget.X, 0, toTarget.Z)
-			if toTarget.Magnitude > 0.1 then
-				moveDir = toTarget.Unit
-				root.CFrame = CFrame.lookAt(ePos, ePos + moveDir)
-			end
+			moveDir = flatDir
 
-			-- Check detonation
+			-- Detonate on close contact
 			if dist <= 5.5 then
-				-- Detonate!
 				Remotes.GetEvent("VFXEvent"):FireAllClients("Explosion", ePos, 12, Color3.fromRGB(255, 60, 20))
 				PlayerStatsManager.TakeDamage(targetPlayer, enemy.config.contactDamage, enemy)
 				EnemyService.KillEnemy(enemy, nil)
@@ -483,21 +701,25 @@ RunService.Heartbeat:Connect(function(dt: number)
 			end
 
 		elseif behavior == "FLEE_LOOT" then
-			-- Runs away from player
-			local awayDir = (ePos - targetPos)
-			awayDir = Vector3.new(awayDir.X, 0, awayDir.Z)
-			if awayDir.Magnitude > 0.1 then
-				moveDir = awayDir.Unit
-				root.CFrame = CFrame.lookAt(ePos, ePos + moveDir)
-			end
+			moveDir = -flatDir
 		end
 
-		-- Set velocity
-		local targetVelocity = moveDir * enemy.config.moveSpeed
-		root.AssemblyLinearVelocity = Vector3.new(targetVelocity.X, root.AssemblyLinearVelocity.Y, targetVelocity.Z)
+		-- Kinematic position & rotation update
+		local fixedY = getEnemyFixedY(enemy.config.id, enemy.config.size.Y)
+		local newPos = ePos + (moveDir * (enemy.config.moveSpeed * dt))
+		newPos = Vector3.new(newPos.X, fixedY, newPos.Z)
 
-		-- Contact Damage to player
-		if dist <= (enemy.config.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.5) then
+		if behavior == "KITE_SHOOT" and flatDir.Magnitude > 0.05 then
+			-- Always face the player while shooting
+			enemy.model:PivotTo(CFrame.lookAt(newPos, newPos + flatDir))
+		elseif moveDir.Magnitude > 0.05 then
+			enemy.model:PivotTo(CFrame.lookAt(newPos, newPos + moveDir))
+		else
+			enemy.model:PivotTo(CFrame.new(newPos) * root.CFrame.Rotation)
+		end
+
+		-- Contact Damage to player (tested on 2D XZ plane)
+		if flatDist <= (enemy.config.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.5) then
 			enemy.lastContactTime = now
 			PlayerStatsManager.TakeDamage(targetPlayer, enemy.config.contactDamage, enemy)
 		end
