@@ -43,7 +43,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 0,
 		bulletSpeed = 0,
 		color = Color3.fromRGB(240, 60, 60),
-		size = Vector3.new(1.8, 1.8, 1.8),
+		size = Vector3.new(4.5, 4.5, 4.5),
 	},
 
 	AssaultMecha = {
@@ -63,7 +63,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 0,
 		bulletSpeed = 0,
 		color = Color3.fromRGB(200, 110, 40),
-		size = Vector3.new(2.4, 3.2, 2.4),
+		size = Vector3.new(6.0, 8.0, 6.0),
 	},
 
 	SniperBot = {
@@ -83,7 +83,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 16,
 		bulletSpeed = 80,
 		color = Color3.fromRGB(180, 50, 220),
-		size = Vector3.new(2.0, 3.2, 2.0),
+		size = Vector3.new(5.0, 7.5, 5.0),
 	},
 
 	HeavyJuggernaut = {
@@ -103,7 +103,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 0,
 		bulletSpeed = 0,
 		color = Color3.fromRGB(80, 80, 100),
-		size = Vector3.new(3.8, 4.4, 3.8),
+		size = Vector3.new(8.5, 11.0, 8.5),
 	},
 
 	KamikazeRoller = {
@@ -123,7 +123,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 0,
 		bulletSpeed = 0,
 		color = Color3.fromRGB(255, 30, 30),
-		size = Vector3.new(1.8, 1.8, 1.8),
+		size = Vector3.new(4.0, 4.0, 4.0),
 	},
 
 	OverlordBoss = {
@@ -143,7 +143,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 22,
 		bulletSpeed = 65,
 		color = Color3.fromRGB(220, 20, 50),
-		size = Vector3.new(6.0, 7.2, 6.0),
+		size = Vector3.new(14.0, 18.0, 14.0),
 	},
 
 	MetaDrone = {
@@ -163,7 +163,7 @@ local TYPES: { [string]: EnemyConfig } = {
 		bulletDamage = 0,
 		bulletSpeed = 0,
 		color = Color3.fromRGB(255, 215, 0),
-		size = Vector3.new(2.2, 2.2, 2.2),
+		size = Vector3.new(3.5, 3.5, 3.5),
 	},
 }
 EnemiesData.TYPES = TYPES
