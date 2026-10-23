@@ -22,6 +22,7 @@ export type PlayerData = {
 	statBonuses: { [StatTypes.StatType]: number },
 	currentStats: StatTypes.PlayerStats,
 	isDead: boolean,
+	isLevelUpPhase: boolean,
 }
 
 local PlayerStatsManager = {}
@@ -53,6 +54,7 @@ function PlayerStatsManager.InitPlayer(player: Player): PlayerData
 		},
 		currentStats = StatTypes.CloneStats(base),
 		isDead = false,
+		isLevelUpPhase = false,
 	}
 
 	playerDataMap[player] = data
@@ -114,9 +116,41 @@ function PlayerStatsManager.AddStat(player: Player, statType: StatTypes.StatType
 	GameEvents.OnGainStat:Fire(player, statType, amount)
 end
 
+function PlayerStatsManager.SetLevelUpPhase(player: Player, active: boolean)
+	local data = playerDataMap[player]
+	if not data then return end
+	data.isLevelUpPhase = active
+
+	local char = player.Character
+	if char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+				part.Transparency = if active then 0.55 else 0
+			end
+		end
+
+		local highlight = char:FindFirstChild("LevelUpPhaseAura") :: Highlight?
+		if active then
+			if not highlight then
+				highlight = Instance.new("Highlight")
+				highlight.Name = "LevelUpPhaseAura"
+				highlight.FillColor = Color3.fromRGB(0, 230, 255)
+				highlight.FillTransparency = 0.65
+				highlight.OutlineColor = Color3.fromRGB(0, 255, 255)
+				highlight.OutlineTransparency = 0.2
+				highlight.Parent = char
+			end
+		else
+			if highlight then
+				highlight:Destroy()
+			end
+		end
+	end
+end
+
 function PlayerStatsManager.TakeDamage(player: Player, rawDamage: number, attacker: any?): number
 	local data = playerDataMap[player]
-	if not data or data.isDead then return 0 end
+	if not data or data.isDead or data.isLevelUpPhase then return 0 end
 
 	local actualDamage = StatTypes.CalculateDamageAfterArmor(rawDamage, data.currentStats.Armor)
 	data.currentHP = math.max(0, data.currentHP - actualDamage)

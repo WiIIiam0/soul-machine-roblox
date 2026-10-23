@@ -1,8 +1,9 @@
 --!strict
--- ClientHUD.client.luau: Full Sci-Fi Mecha HUD (XP bar, Health, Overdrive, Wave status, Level-Up cards modal)
+-- ClientHUD.client.luau: Faithful Cyberpunk HUD, 3-Row Inventory, Damage Flash, and Level Up Modal with Countdown
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -20,53 +21,78 @@ screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
--- --- 1. TOP CENTER: XP BAR & LEVEL ---
-local xpContainer = Instance.new("Frame")
-xpContainer.Name = "XPContainer"
-xpContainer.Size = UDim2.new(0, 420, 0, 42)
-xpContainer.Position = UDim2.new(0.5, -210, 0, 16)
-xpContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
-xpContainer.BackgroundTransparency = 0.25
-xpContainer.BorderSizePixel = 0
-xpContainer.Parent = screenGui
+-- --- 1. FULLSCREEN DAMAGE FLASH (Vignette) ---
+local damageFlash = Instance.new("Frame")
+damageFlash.Name = "DamageFlash"
+damageFlash.Size = UDim2.new(1, 0, 1, 0)
+damageFlash.BackgroundColor3 = Color3.fromRGB(220, 20, 30)
+damageFlash.BackgroundTransparency = 1
+damageFlash.BorderSizePixel = 0
+damageFlash.ZIndex = 50
+damageFlash.Parent = screenGui
 
-local xpCorner = Instance.new("UICorner")
-xpCorner.CornerRadius = UDim.new(0, 8)
-xpCorner.Parent = xpContainer
+local function triggerDamageFlash()
+	damageFlash.BackgroundTransparency = 0.65
+	local tw = TweenService:Create(damageFlash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1,
+	})
+	tw:Play()
+end
 
-local xpStroke = Instance.new("UIStroke")
-xpStroke.Color = Color3.fromRGB(0, 180, 255)
-xpStroke.Thickness = 1.5
-xpStroke.Parent = xpContainer
+-- --- 2. TOP BAR: XP & WAVE TRACKER ---
+local topBarContainer = Instance.new("Frame")
+topBarContainer.Name = "TopBarContainer"
+topBarContainer.Size = UDim2.new(0, 520, 0, 48)
+topBarContainer.Position = UDim2.new(0.5, -260, 0, 16)
+topBarContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
+topBarContainer.BackgroundTransparency = 0.25
+topBarContainer.BorderSizePixel = 0
+topBarContainer.Parent = screenGui
 
+local topBarCorner = Instance.new("UICorner")
+topBarCorner.CornerRadius = UDim.new(0, 8)
+topBarCorner.Parent = topBarContainer
+
+local topBarStroke = Instance.new("UIStroke")
+topBarStroke.Color = Color3.fromRGB(0, 180, 240)
+topBarStroke.Thickness = 1.5
+topBarStroke.Transparency = 0.3
+topBarStroke.Parent = topBarContainer
+
+-- Level Badge
 local levelBadge = Instance.new("TextLabel")
 levelBadge.Name = "LevelBadge"
-levelBadge.Size = UDim2.new(0, 90, 1, 0)
-levelBadge.BackgroundColor3 = Color3.fromRGB(0, 140, 220)
-levelBadge.TextColor3 = Color3.fromRGB(255, 255, 255)
-levelBadge.Font = Enum.Font.GothamBold
+levelBadge.Size = UDim2.new(0, 80, 1, 0)
+levelBadge.BackgroundTransparency = 1
+levelBadge.TextColor3 = Color3.fromRGB(0, 240, 255)
+levelBadge.Font = Enum.Font.GothamBlack
 levelBadge.TextSize = 14
 levelBadge.Text = "NIV. 1"
-levelBadge.Parent = xpContainer
+levelBadge.Parent = topBarContainer
 
-local badgeCorner = Instance.new("UICorner")
-badgeCorner.CornerRadius = UDim.new(0, 8)
-badgeCorner.Parent = levelBadge
-
+-- XP Bar
 local xpBarBg = Instance.new("Frame")
-xpBarBg.Name = "BarBG"
-xpBarBg.Size = UDim2.new(1, -106, 0, 16)
-xpBarBg.Position = UDim2.new(0, 98, 0.5, -8)
+xpBarBg.Name = "XPBarBg"
+xpBarBg.Size = UDim2.new(1, -260, 0, 14)
+xpBarBg.Position = UDim2.new(0, 85, 0.5, -7)
 xpBarBg.BackgroundColor3 = Color3.fromRGB(8, 12, 18)
 xpBarBg.BorderSizePixel = 0
-xpBarBg.Parent = xpContainer
+xpBarBg.Parent = topBarContainer
+
+local xpCorner = Instance.new("UICorner")
+xpCorner.CornerRadius = UDim.new(0.5, 0)
+xpCorner.Parent = xpBarBg
 
 local xpBarFill = Instance.new("Frame")
 xpBarFill.Name = "Fill"
 xpBarFill.Size = UDim2.new(0, 0, 1, 0)
-xpBarFill.BackgroundColor3 = Color3.fromRGB(0, 230, 255)
+xpBarFill.BackgroundColor3 = Color3.fromRGB(170, 70, 255) -- Violet XP
 xpBarFill.BorderSizePixel = 0
 xpBarFill.Parent = xpBarBg
+
+local xpFillCorner = Instance.new("UICorner")
+xpFillCorner.CornerRadius = UDim.new(0.5, 0)
+xpFillCorner.Parent = xpBarFill
 
 local xpText = Instance.new("TextLabel")
 xpText.Name = "XPText"
@@ -74,51 +100,123 @@ xpText.Size = UDim2.new(1, 0, 1, 0)
 xpText.BackgroundTransparency = 1
 xpText.TextColor3 = Color3.fromRGB(255, 255, 255)
 xpText.Font = Enum.Font.GothamBold
-xpText.TextSize = 11
+xpText.TextSize = 10
 xpText.Text = "0 / 12 XP"
 xpText.Parent = xpBarBg
 
--- --- 2. TOP BAR: WAVE STATUS & RADAR ---
-local waveContainer = Instance.new("Frame")
-waveContainer.Name = "WaveContainer"
-waveContainer.Size = UDim2.new(0, 280, 0, 50)
-waveContainer.Position = UDim2.new(0.5, -140, 0, 68)
-waveContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
-waveContainer.BackgroundTransparency = 0.3
-waveContainer.BorderSizePixel = 0
-waveContainer.Parent = screenGui
+-- Wave & Enemies Tracker
+local waveInfoLabel = Instance.new("TextLabel")
+waveInfoLabel.Name = "WaveInfoLabel"
+waveInfoLabel.Size = UDim2.new(0, 160, 1, 0)
+waveInfoLabel.Position = UDim2.new(1, -165, 0, 0)
+waveInfoLabel.BackgroundTransparency = 1
+waveInfoLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+waveInfoLabel.Font = Enum.Font.GothamBlack
+waveInfoLabel.TextSize = 12
+waveInfoLabel.Text = "VAGUE 1 (40s) | 0 FOES"
+waveInfoLabel.Parent = topBarContainer
 
-local waveCorner = Instance.new("UICorner")
-waveCorner.CornerRadius = UDim.new(0, 8)
-waveCorner.Parent = waveContainer
+-- --- 3. TOP-LEFT: 3-ROW INVENTORY (Fidèle à l'original: ARMES, PASSIFS, STATS) ---
+local invContainer = Instance.new("Frame")
+invContainer.Name = "InventoryContainer"
+invContainer.Size = UDim2.new(0, 310, 0, 128)
+invContainer.Position = UDim2.new(0, 20, 0, 20)
+invContainer.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
+invContainer.BackgroundTransparency = 0.25
+invContainer.BorderSizePixel = 0
+invContainer.Parent = screenGui
 
-local waveLabel = Instance.new("TextLabel")
-waveLabel.Name = "WaveLabel"
-waveLabel.Size = UDim2.new(1, 0, 0.5, 0)
-waveLabel.BackgroundTransparency = 1
-waveLabel.TextColor3 = Color3.fromRGB(255, 200, 40)
-waveLabel.Font = Enum.Font.GothamBlack
-waveLabel.TextSize = 15
-waveLabel.Text = "VAGUE 1"
-waveLabel.Parent = waveContainer
+local invCorner = Instance.new("UICorner")
+invCorner.CornerRadius = UDim.new(0, 10)
+invCorner.Parent = invContainer
 
-local waveSubLabel = Instance.new("TextLabel")
-waveSubLabel.Name = "WaveSubLabel"
-waveSubLabel.Size = UDim2.new(1, 0, 0.5, 0)
-waveSubLabel.Position = UDim2.new(0, 0, 0.5, 0)
-waveSubLabel.BackgroundTransparency = 1
-waveSubLabel.TextColor3 = Color3.fromRGB(200, 220, 240)
-waveSubLabel.Font = Enum.Font.GothamMedium
-waveSubLabel.TextSize = 12
-waveSubLabel.Text = "ASSAUT EN COURS (40s) | 0 ENNEMIS"
-waveSubLabel.Parent = waveContainer
+local invStroke = Instance.new("UIStroke")
+invStroke.Color = Color3.fromRGB(0, 200, 255)
+invStroke.Thickness = 1.5
+invStroke.Transparency = 0.4
+invStroke.Parent = invContainer
 
--- --- 3. BOTTOM LEFT: HEALTH & SHIELD/ARMOR ---
+local function createInvRow(name: string, labelText: string, labelColor: Color3, yPos: number): (Frame, Frame)
+	local row = Instance.new("Frame")
+	row.Name = name .. "Row"
+	row.Size = UDim2.new(1, -20, 0, 32)
+	row.Position = UDim2.new(0, 10, 0, yPos)
+	row.BackgroundTransparency = 1
+	row.Parent = invContainer
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.Size = UDim2.new(0, 75, 1, 0)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = labelColor
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 12
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Text = labelText
+	label.Parent = row
+
+	local slots = Instance.new("Frame")
+	slots.Name = "Slots"
+	slots.Size = UDim2.new(1, -75, 1, 0)
+	slots.Position = UDim2.new(0, 75, 0, 0)
+	slots.BackgroundTransparency = 1
+	slots.Parent = row
+
+	return row, slots
+end
+
+local _, weaponSlots = createInvRow("Weapons", "ARMES", Color3.fromRGB(255, 100, 100), 8)
+local _, passiveSlots = createInvRow("Passives", "PASSIFS", Color3.fromRGB(200, 150, 255), 44)
+local _, statSlots = createInvRow("Stats", "STATS", Color3.fromRGB(100, 255, 150), 80)
+
+local function populateRowSlots(container: Frame, count: number, borderColor: Color3, items: { { name: string, rank: number } })
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
+
+	for i = 1, count do
+		local box = Instance.new("Frame")
+		box.Name = "Slot_" .. i
+		box.Size = UDim2.new(0, 30, 0, 30)
+		box.Position = UDim2.new(0, (i - 1) * 34, 0, 1)
+		box.BackgroundColor3 = Color3.fromRGB(14, 18, 30)
+		box.BorderSizePixel = 0
+		box.Parent = container
+
+		local bCorner = Instance.new("UICorner")
+		bCorner.CornerRadius = UDim.new(0, 6)
+		bCorner.Parent = box
+
+		local bStroke = Instance.new("UIStroke")
+		bStroke.Thickness = 1.2
+		bStroke.Parent = box
+
+		if items[i] then
+			bStroke.Color = borderColor
+			bStroke.Transparency = 0.2
+			box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
+
+			local rankText = Instance.new("TextLabel")
+			rankText.Size = UDim2.new(1, 0, 1, 0)
+			rankText.BackgroundTransparency = 1
+			rankText.TextColor3 = Color3.fromRGB(255, 255, 255)
+			rankText.Font = Enum.Font.GothamBold
+			rankText.TextSize = 10
+			rankText.Text = tostring(items[i].rank)
+			rankText.Parent = box
+		else
+			bStroke.Color = Color3.fromRGB(40, 50, 70)
+			bStroke.Transparency = 0.7
+		end
+	end
+end
+
+-- --- 4. BOTTOM LEFT: HEALTH & SHIELD ---
 local vitalsContainer = Instance.new("Frame")
 vitalsContainer.Name = "VitalsContainer"
-vitalsContainer.Size = UDim2.new(0, 260, 0, 64)
-vitalsContainer.Position = UDim2.new(0, 24, 1, -88)
-vitalsContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
+vitalsContainer.Size = UDim2.new(0, 260, 0, 60)
+vitalsContainer.Position = UDim2.new(0, 24, 1, -84)
+vitalsContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
 vitalsContainer.BackgroundTransparency = 0.25
 vitalsContainer.BorderSizePixel = 0
 vitalsContainer.Parent = screenGui
@@ -127,20 +225,34 @@ local vitalsCorner = Instance.new("UICorner")
 vitalsCorner.CornerRadius = UDim.new(0, 8)
 vitalsCorner.Parent = vitalsContainer
 
+local vitalsStroke = Instance.new("UIStroke")
+vitalsStroke.Color = Color3.fromRGB(0, 200, 255)
+vitalsStroke.Thickness = 1.5
+vitalsStroke.Transparency = 0.4
+vitalsStroke.Parent = vitalsContainer
+
 local hpBarBg = Instance.new("Frame")
-hpBarBg.Name = "HPBarBG"
-hpBarBg.Size = UDim2.new(1, -20, 0, 22)
-hpBarBg.Position = UDim2.new(0, 10, 0, 10)
-hpBarBg.BackgroundColor3 = Color3.fromRGB(50, 15, 15)
+hpBarBg.Name = "HPBarBg"
+hpBarBg.Size = UDim2.new(1, -20, 0, 18)
+hpBarBg.Position = UDim2.new(0, 10, 0, 8)
+hpBarBg.BackgroundColor3 = Color3.fromRGB(25, 10, 10)
 hpBarBg.BorderSizePixel = 0
 hpBarBg.Parent = vitalsContainer
+
+local hpCorner = Instance.new("UICorner")
+hpCorner.CornerRadius = UDim.new(0, 5)
+hpCorner.Parent = hpBarBg
 
 local hpBarFill = Instance.new("Frame")
 hpBarFill.Name = "Fill"
 hpBarFill.Size = UDim2.new(1, 0, 1, 0)
-hpBarFill.BackgroundColor3 = Color3.fromRGB(50, 220, 80)
+hpBarFill.BackgroundColor3 = Color3.fromRGB(50, 220, 70)
 hpBarFill.BorderSizePixel = 0
 hpBarFill.Parent = hpBarBg
+
+local hpFillCorner = Instance.new("UICorner")
+hpFillCorner.CornerRadius = UDim.new(0, 5)
+hpFillCorner.Parent = hpBarFill
 
 local hpText = Instance.new("TextLabel")
 hpText.Name = "HPText"
@@ -148,27 +260,27 @@ hpText.Size = UDim2.new(1, 0, 1, 0)
 hpText.BackgroundTransparency = 1
 hpText.TextColor3 = Color3.fromRGB(255, 255, 255)
 hpText.Font = Enum.Font.GothamBold
-hpText.TextSize = 12
+hpText.TextSize = 11
 hpText.Text = "100 / 100 PV"
 hpText.Parent = hpBarBg
 
 local armorText = Instance.new("TextLabel")
 armorText.Name = "ArmorText"
 armorText.Size = UDim2.new(1, -20, 0, 20)
-armorText.Position = UDim2.new(0, 10, 0, 36)
+armorText.Position = UDim2.new(0, 10, 0, 32)
 armorText.BackgroundTransparency = 1
-armorText.TextColor3 = Color3.fromRGB(160, 200, 255)
+armorText.TextColor3 = Color3.fromRGB(150, 200, 255)
 armorText.Font = Enum.Font.GothamMedium
 armorText.TextSize = 11
 armorText.TextXAlignment = Enum.TextXAlignment.Left
 armorText.Text = "🛡️ BLINDAGE : 0 ARMURE (0% RÉDUCTION)"
 armorText.Parent = vitalsContainer
 
--- --- 4. BOTTOM CENTER: OVERDRIVE REACTOR ---
+-- --- 5. BOTTOM CENTER: OVERDRIVE REACTOR ---
 local odContainer = Instance.new("Frame")
 odContainer.Name = "OverdriveContainer"
 odContainer.Size = UDim2.new(0, 320, 0, 52)
-odContainer.Position = UDim2.new(0.5, -160, 1, -76)
+odContainer.Position = UDim2.new(0.5, -160, 1, -74)
 odContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
 odContainer.BackgroundTransparency = 0.25
 odContainer.BorderSizePixel = 0
@@ -201,145 +313,205 @@ odBtn.BackgroundTransparency = 1
 odBtn.TextColor3 = Color3.fromRGB(255, 160, 60)
 odBtn.Font = Enum.Font.GothamBold
 odBtn.TextSize = 11
-odBtn.Text = "REACTEUR OVERDRIVE : 0%"
+odBtn.Text = "RÉACTEUR OVERDRIVE : 0%"
 odBtn.Parent = odContainer
 
 odBtn.Activated:Connect(function()
 	Remotes.GetEvent("TriggerOverdrive"):FireServer()
 end)
 
--- --- 5. BOTTOM RIGHT: WEAPONS TRAY ---
-local weaponsContainer = Instance.new("Frame")
-weaponsContainer.Name = "WeaponsContainer"
-weaponsContainer.Size = UDim2.new(0, 240, 0, 110)
-weaponsContainer.Position = UDim2.new(1, -264, 1, -134)
-weaponsContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
-weaponsContainer.BackgroundTransparency = 0.3
-weaponsContainer.BorderSizePixel = 0
-weaponsContainer.Parent = screenGui
-
-local wCorner = Instance.new("UICorner")
-wCorner.CornerRadius = UDim.new(0, 8)
-wCorner.Parent = weaponsContainer
-
-local wHeader = Instance.new("TextLabel")
-wHeader.Size = UDim2.new(1, 0, 0, 24)
-wHeader.BackgroundTransparency = 1
-wHeader.TextColor3 = Color3.fromRGB(0, 200, 255)
-wHeader.Font = Enum.Font.GothamBold
-wHeader.TextSize = 11
-wHeader.Text = "ARSENAL DU MECHA"
-wHeader.Parent = weaponsContainer
-
-local wList = Instance.new("TextLabel")
-wList.Name = "WList"
-wList.Size = UDim2.new(1, -16, 1, -30)
-wList.Position = UDim2.new(0, 8, 0, 26)
-wList.BackgroundTransparency = 1
-wList.TextColor3 = Color3.fromRGB(220, 230, 245)
-wList.Font = Enum.Font.Gotham
-wList.TextSize = 11
-wList.TextXAlignment = Enum.TextXAlignment.Left
-wList.TextYAlignment = Enum.TextYAlignment.Top
-wList.Text = "• Canon Impulsion (Rang 1)"
-wList.Parent = weaponsContainer
-
--- --- 6. LEVEL UP 3-CARD MODAL ---
+-- --- 6. LEVEL UP MODAL AVEC COMPTE À REBOURS (15s) ET DESIGN FIDÈLE ---
 local levelUpModal = Instance.new("Frame")
 levelUpModal.Name = "LevelUpModal"
 levelUpModal.Size = UDim2.new(1, 0, 1, 0)
-levelUpModal.BackgroundColor3 = Color3.fromRGB(5, 8, 14)
-levelUpModal.BackgroundTransparency = 0.4
+levelUpModal.BackgroundColor3 = Color3.fromRGB(10, 15, 30)
+levelUpModal.BackgroundTransparency = 0.15
 levelUpModal.Visible = false
+levelUpModal.ZIndex = 100
 levelUpModal.Parent = screenGui
 
+-- Titre
 local modalTitle = Instance.new("TextLabel")
-modalTitle.Size = UDim2.new(1, 0, 0, 60)
-modalTitle.Position = UDim2.new(0, 0, 0.15, 0)
+modalTitle.Name = "Title"
+modalTitle.Size = UDim2.new(1, 0, 0, 44)
+modalTitle.Position = UDim2.new(0, 0, 0.08, 0)
 modalTitle.BackgroundTransparency = 1
-modalTitle.TextColor3 = Color3.fromRGB(0, 230, 255)
+modalTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 modalTitle.Font = Enum.Font.GothamBlack
-modalTitle.TextSize = 28
-modalTitle.Text = "SÉLECTION DU PROTOCOLE D'ÉVOLUTION"
+modalTitle.TextSize = 34
+modalTitle.Text = "NIVEAU SUPÉRIEUR"
 modalTitle.Parent = levelUpModal
+
+local subtitleLabel = Instance.new("TextLabel")
+subtitleLabel.Name = "Subtitle"
+subtitleLabel.Size = UDim2.new(1, 0, 0, 24)
+subtitleLabel.Position = UDim2.new(0, 0, 0.14, 0)
+subtitleLabel.BackgroundTransparency = 1
+subtitleLabel.TextColor3 = Color3.fromRGB(150, 220, 255)
+subtitleLabel.Font = Enum.Font.GothamMedium
+subtitleLabel.TextSize = 16
+subtitleLabel.Text = "Choisissez une amélioration"
+subtitleLabel.Parent = levelUpModal
+
+-- Compte à rebours (15s)
+local timerContainer = Instance.new("Frame")
+timerContainer.Name = "TimerContainer"
+timerContainer.Size = UDim2.new(0, 360, 0, 26)
+timerContainer.Position = UDim2.new(0.5, -180, 0.19, 0)
+timerContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
+timerContainer.BorderSizePixel = 0
+timerContainer.Parent = levelUpModal
+
+local timerCorner = Instance.new("UICorner")
+timerCorner.CornerRadius = UDim.new(0.5, 0)
+timerCorner.Parent = timerContainer
+
+local timerFill = Instance.new("Frame")
+timerFill.Name = "Fill"
+timerFill.Size = UDim2.new(1, 0, 1, 0)
+timerFill.BackgroundColor3 = Color3.fromRGB(0, 220, 255)
+timerFill.BorderSizePixel = 0
+timerFill.Parent = timerContainer
+
+local timerFillCorner = Instance.new("UICorner")
+timerFillCorner.CornerRadius = UDim.new(0.5, 0)
+timerFillCorner.Parent = timerFill
+
+local timerLabel = Instance.new("TextLabel")
+timerLabel.Name = "TimerLabel"
+timerLabel.Size = UDim2.new(1, 0, 1, 0)
+timerLabel.BackgroundTransparency = 1
+timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+timerLabel.Font = Enum.Font.GothamBold
+timerLabel.TextSize = 12
+timerLabel.Text = "TEMPS RESTANT : 15s"
+timerLabel.ZIndex = 2
+timerLabel.Parent = timerContainer
 
 local cardsHolder = Instance.new("Frame")
 cardsHolder.Name = "CardsHolder"
-cardsHolder.Size = UDim2.new(0, 840, 0, 360)
-cardsHolder.Position = UDim2.new(0.5, -420, 0.5, -150)
+cardsHolder.Size = UDim2.new(0, 940, 0, 420)
+cardsHolder.Position = UDim2.new(0.5, -470, 0.5, -170)
 cardsHolder.BackgroundTransparency = 1
 cardsHolder.Parent = levelUpModal
+
+local countdownRemaining = 15.0
+local countdownActive = false
 
 local function createChoiceCard(index: number, cardData: any, xOffset: number): Frame
 	local card = Instance.new("Frame")
 	card.Name = "Card_" .. index
-	card.Size = UDim2.new(0, 250, 0, 340)
+	card.Size = UDim2.new(0, 280, 0, 400)
 	card.Position = UDim2.new(0, xOffset, 0, 0)
-	card.BackgroundColor3 = Color3.fromRGB(18, 24, 38)
+	card.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
+	card.BackgroundTransparency = 0.1
 	card.BorderSizePixel = 0
 	card.Parent = cardsHolder
 
 	local cCorner = Instance.new("UICorner")
-	cCorner.CornerRadius = UDim.new(0, 12)
+	cCorner.CornerRadius = UDim.new(0, 20)
 	cCorner.Parent = card
 
 	local cStroke = Instance.new("UIStroke")
 	cStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
-	cStroke.Thickness = 2
+	cStroke.Thickness = 2.5
 	cStroke.Parent = card
 
-	-- Card Category Tag
-	local tag = Instance.new("TextLabel")
-	tag.Size = UDim2.new(1, -20, 0, 24)
-	tag.Position = UDim2.new(0, 10, 0, 12)
-	tag.BackgroundTransparency = 1
-	tag.TextColor3 = cardData.rarityColor
-	tag.Font = Enum.Font.GothamBold
-	tag.TextSize = 11
-	tag.Text = cardData.subtitle or "UPGRADE"
-	tag.Parent = card
+	-- Floating Category Badge on top border (-15px)
+	local categoryBadge = Instance.new("TextLabel")
+	categoryBadge.Name = "CategoryBadge"
+	categoryBadge.Size = UDim2.new(0, 120, 0, 28)
+	categoryBadge.Position = UDim2.new(0.5, -60, 0, -14)
+	categoryBadge.BackgroundColor3 = Color3.fromRGB(10, 20, 30)
+	categoryBadge.TextColor3 = cardData.rarityColor or Color3.fromRGB(255, 255, 255)
+	categoryBadge.Font = Enum.Font.GothamBlack
+	categoryBadge.TextSize = 12
+	categoryBadge.Text = cardData.category or "UPGRADE"
+	categoryBadge.Parent = card
+
+	local catCorner = Instance.new("UICorner")
+	catCorner.CornerRadius = UDim.new(0, 8)
+	catCorner.Parent = categoryBadge
+
+	local catStroke = Instance.new("UIStroke")
+	catStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
+	catStroke.Thickness = 1.5
+	catStroke.Parent = categoryBadge
 
 	-- Card Title
 	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -20, 0, 48)
-	title.Position = UDim2.new(0, 10, 0, 38)
+	title.Name = "Title"
+	title.Size = UDim2.new(1, -24, 0, 48)
+	title.Position = UDim2.new(0, 12, 0, 28)
 	title.BackgroundTransparency = 1
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
 	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 16
+	title.TextSize = 17
 	title.TextWrapped = true
 	title.Text = cardData.title
 	title.Parent = card
 
-	-- Card Icon Image
+	-- Icon Box
+	local iconBox = Instance.new("Frame")
+	iconBox.Name = "IconBox"
+	iconBox.Size = UDim2.new(0, 80, 0, 80)
+	iconBox.Position = UDim2.new(0.5, -40, 0, 86)
+	iconBox.BackgroundColor3 = Color3.fromRGB(10, 20, 40)
+	iconBox.BorderSizePixel = 0
+	iconBox.Parent = card
+
+	local iCorner = Instance.new("UICorner")
+	iCorner.CornerRadius = UDim.new(0, 14)
+	iCorner.Parent = iconBox
+
+	local iStroke = Instance.new("UIStroke")
+	iStroke.Color = cardData.rarityColor
+	iStroke.Thickness = 2
+	iStroke.Transparency = 0.3
+	iStroke.Parent = iconBox
+
 	local iconImg = Instance.new("ImageLabel")
-	iconImg.Size = UDim2.new(0, 72, 0, 72)
-	iconImg.Position = UDim2.new(0.5, -36, 0, 96)
+	iconImg.Size = UDim2.new(1, -12, 1, -12)
+	iconImg.Position = UDim2.new(0, 6, 0, 6)
 	iconImg.BackgroundTransparency = 1
 	iconImg.Image = cardData.icon or "rbxassetid://10709791437"
-	iconImg.Parent = card
+	iconImg.ImageColor3 = cardData.rarityColor
+	iconImg.Parent = iconBox
 
-	-- Card Description
+	-- Subtitle (e.g. RANG 1 ➔ 2 or +20% PV)
+	local subLabel = Instance.new("TextLabel")
+	subLabel.Name = "SubLabel"
+	subLabel.Size = UDim2.new(1, -20, 0, 24)
+	subLabel.Position = UDim2.new(0, 10, 0, 178)
+	subLabel.BackgroundTransparency = 1
+	subLabel.TextColor3 = cardData.rarityColor
+	subLabel.Font = Enum.Font.GothamBold
+	subLabel.TextSize = 12
+	subLabel.Text = cardData.subtitle or ""
+	subLabel.Parent = card
+
+	-- Description
 	local desc = Instance.new("TextLabel")
-	desc.Size = UDim2.new(1, -24, 0, 90)
-	desc.Position = UDim2.new(0, 12, 0, 180)
+	desc.Name = "Desc"
+	desc.Size = UDim2.new(1, -24, 0, 110)
+	desc.Position = UDim2.new(0, 12, 0, 206)
 	desc.BackgroundTransparency = 1
-	desc.TextColor3 = Color3.fromRGB(190, 210, 230)
+	desc.TextColor3 = Color3.fromRGB(200, 220, 255)
 	desc.Font = Enum.Font.Gotham
-	desc.TextSize = 12
+	desc.TextSize = 13
 	desc.TextWrapped = true
 	desc.Text = cardData.description or ""
 	desc.Parent = card
 
-	-- Select Button
+	-- Full Card Button / Select Button
 	local selectBtn = Instance.new("TextButton")
 	selectBtn.Name = "SelectBtn"
-	selectBtn.Size = UDim2.new(1, -30, 0, 38)
-	selectBtn.Position = UDim2.new(0, 15, 1, -50)
+	selectBtn.Size = UDim2.new(1, -30, 0, 42)
+	selectBtn.Position = UDim2.new(0, 15, 1, -54)
 	selectBtn.BackgroundColor3 = cardData.rarityColor
-	selectBtn.TextColor3 = Color3.fromRGB(10, 12, 18)
+	selectBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
 	selectBtn.Font = Enum.Font.GothamBlack
-	selectBtn.TextSize = 13
+	selectBtn.TextSize = 14
 	selectBtn.Text = "SÉLECTIONNER"
 	selectBtn.Parent = card
 
@@ -347,36 +519,65 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	btnCorner.CornerRadius = UDim.new(0, 8)
 	btnCorner.Parent = selectBtn
 
-	selectBtn.MouseButton1Click:Connect(function()
+	local function pickThis()
+		if not countdownActive then return end
+		countdownActive = false
 		levelUpModal.Visible = false
 		Remotes.GetEvent("SelectLevelUpChoice"):FireServer(index)
-	end)
+	end
+
+	selectBtn.Activated:Connect(pickThis)
 
 	return card
 end
 
 -- Open Level Up Screen
 Remotes.GetEvent("LevelUpOptions").OnClientEvent:Connect(function(cards: { any })
-	-- Clear old cards
 	for _, child in ipairs(cardsHolder:GetChildren()) do
-		if child:IsA("Frame") then
-			child:Destroy()
-		end
+		if child:IsA("Frame") then child:Destroy() end
 	end
 
-	local offsets = { 20, 295, 570 }
+	local offsets = { 20, 330, 640 }
 	for idx, cardData in ipairs(cards) do
 		if idx <= 3 then
 			createChoiceCard(idx, cardData, offsets[idx])
 		end
 	end
 
+	countdownRemaining = 15.0
+	countdownActive = true
+	timerFill.Size = UDim2.new(1, 0, 1, 0)
+	timerLabel.Text = "TEMPS RESTANT : 15s"
 	levelUpModal.Visible = true
 end)
+
+-- Level Up Countdown Heartbeat
+RunService.Heartbeat:Connect(function(dt: number)
+	if countdownActive and levelUpModal.Visible then
+		countdownRemaining -= dt
+		local ratio = math.clamp(countdownRemaining / 15.0, 0, 1)
+		timerFill.Size = UDim2.new(ratio, 0, 1, 0)
+		timerLabel.Text = string.format("TEMPS RESTANT : %.1fs", math.max(0, countdownRemaining))
+
+		if countdownRemaining <= 0 then
+			countdownActive = false
+			levelUpModal.Visible = false
+			-- Auto-select first choice
+			Remotes.GetEvent("SelectLevelUpChoice"):FireServer(1)
+		end
+	end
+end)
+
+local prevHP: number? = nil
 
 -- State Sync Listener
 Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	if data.currentHP and data.maxHP then
+		if prevHP ~= nil and data.currentHP < prevHP then
+			triggerDamageFlash()
+		end
+		prevHP = data.currentHP
+
 		local hpRatio = math.clamp(data.currentHP / data.maxHP, 0, 1)
 		hpBarFill.Size = UDim2.new(hpRatio, 0, 1, 0)
 		hpText.Text = string.format("%.0f / %.0f PV", data.currentHP, data.maxHP)
@@ -393,7 +594,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		odBarFill.Size = UDim2.new(odRatio, 0, 1, 0)
 
 		if data.isOverdriveActive then
-			odBtn.Text = "⚡ OVERDRIVE ACTIF ! FEU HYPER-FRÉNÉTIQUE !"
+			odBtn.Text = "⚡ OVERDRIVE ACTIF ! FEU FRÉNÉTIQUE !"
 			odBtn.TextColor3 = Color3.fromRGB(255, 50, 80)
 			odBarFill.BackgroundColor3 = Color3.fromRGB(255, 30, 80)
 		elseif odRatio >= 1.0 then
@@ -415,23 +616,33 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.wave then
-		waveLabel.Text = "VAGUE " .. data.wave
 		local stateDesc = "ASSAUT"
-		if data.waveState == "RESTING" then stateDesc = "PAUSE ENTRE VAGUES"
-		elseif data.waveState == "CLEARING" then stateDesc = "NETTOYAGE ESSAIM"
-		elseif data.waveState == "BOSS" then stateDesc = "BOSS EN COURS !"
+		if data.waveState == "RESTING" then stateDesc = "PAUSE"
+		elseif data.waveState == "CLEARING" then stateDesc = "NETTOYAGE"
+		elseif data.waveState == "BOSS" then stateDesc = "BOSS !"
 		end
 
-		waveSubLabel.Text = string.format("%s (%ds) | %d ENNEMIS", stateDesc, data.waveTimer or 0, data.activeEnemies or 0)
+		waveInfoLabel.Text = string.format("VAGUE %d (%ds) | %d ENNEMIS", data.wave, data.waveTimer or 0, data.activeEnemies or 0)
 	end
 
+	-- Populate 3-Row Inventory Slots
 	if data.weapons then
-		local lines: { string } = {}
+		local wList: { { name: string, rank: number } } = {}
 		for wId, rank in pairs(data.weapons) do
 			local wDef = WeaponsData.GetWeapon(wId)
-			local name = if wDef then wDef.name else wId
-			table.insert(lines, string.format("• %s (Rang %d)", name, rank))
+			table.insert(wList, { name = if wDef then wDef.name else wId, rank = rank })
 		end
-		wList.Text = table.concat(lines, "\n")
+		populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), wList)
+	end
+
+	if data.stats then
+		local sList: { { name: string, rank: number } } = {}
+		local statEntries = { "MaxHP", "Speed", "DamageMultiplier", "Armor", "LifeSteal", "RangeMultiplier" }
+		for _, sKey in ipairs(statEntries) do
+			if data.stats[sKey] then
+				table.insert(sList, { name = sKey, rank = math.floor(data.stats[sKey]) })
+			end
+		end
+		populateRowSlots(statSlots, 6, Color3.fromRGB(50, 255, 120), sList)
 	end
 end)

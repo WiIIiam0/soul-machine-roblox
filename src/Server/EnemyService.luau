@@ -48,8 +48,8 @@ end
 local cachedTemplates: { [string]: Model? } = {}
 
 local KEYWORD_MAPPINGS: { [string]: { string } } = {
-	ScoutDrone = { "drone_worker", "droneworker", "worker", "farmer", "scout", "minion_blue_melee", "minion_red_melee" },
-	AssaultMecha = { "drone_fighter", "dronefighter", "fighter", "assault", "gunner", "shooter", "minion_blue_ranged", "minion_red_ranged" },
+	ScoutDrone = { "drone_worker", "droneworker", "cockpit_worker", "worker", "farmer", "scout", "minion_blue_melee", "minion_red_melee", "minion_melee" },
+	AssaultMecha = { "drone_fighter", "dronefighter", "copter_fighter", "fighter", "assault", "gunner", "shooter", "minion_blue_ranged", "minion_red_ranged", "minion_ranged" },
 	SniperBot = { "sniper", "turret", "laserbot", "blaster" },
 	HeavyJuggernaut = { "spider", "tank", "heavy", "juggernaut", "brute", "colosse" },
 	KamikazeRoller = { "roller", "kamikaze", "sphere", "bomb" },
@@ -81,10 +81,28 @@ local function findCustomTemplate(enemyId: string): Model?
 	local containers = { ReplicatedStorage, ServerStorage, Workspace }
 	for _, container in ipairs(containers) do
 		for _, desc in ipairs(container:GetDescendants()) do
-			if desc:IsA("Model") and not desc:FindFirstAncestor("ActiveEnemies") and matches(desc.Name) then
-				print(string.format("[EnemyService] Custom 3D Model detected for '%s': %s (%s)", enemyId, desc.Name, desc:GetFullName()))
-				cachedTemplates[enemyId] = desc
-				return desc
+			if not desc:FindFirstAncestor("ActiveEnemies") and matches(desc.Name) then
+				if desc:IsA("Model") then
+					print(string.format("[EnemyService] Custom 3D Model detected for '%s': %s (%s)", enemyId, desc.Name, desc:GetFullName()))
+					cachedTemplates[enemyId] = desc
+					return desc
+				elseif desc:IsA("Folder") then
+					local m = Instance.new("Model")
+					m.Name = desc.Name
+					for _, c in ipairs(desc:GetChildren()) do
+						c:Clone().Parent = m
+					end
+					print(string.format("[EnemyService] Custom 3D Folder converted for '%s': %s (%s)", enemyId, desc.Name, desc:GetFullName()))
+					cachedTemplates[enemyId] = m
+					return m
+				elseif desc:IsA("MeshPart") and not desc.Parent:IsA("Model") then
+					local m = Instance.new("Model")
+					m.Name = desc.Name
+					desc:Clone().Parent = m
+					print(string.format("[EnemyService] Custom 3D MeshPart converted for '%s': %s (%s)", enemyId, desc.Name, desc:GetFullName()))
+					cachedTemplates[enemyId] = m
+					return m
+				end
 			end
 		end
 	end
@@ -589,7 +607,7 @@ local function getNearestPlayer(pos: Vector3): (Player?, Vector3?, number)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local pData = PlayerStatsManager.GetPlayerData(player)
-		if pData and not pData.isDead then
+		if pData and not pData.isDead and not pData.isLevelUpPhase then
 			local char = player.Character
 			if char and char:FindFirstChild("HumanoidRootPart") then
 				local pPos = (char:FindFirstChild("HumanoidRootPart") :: BasePart).Position

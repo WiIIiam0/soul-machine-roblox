@@ -159,17 +159,44 @@ function RewardService.OfferLevelUpRewards(player: Player)
 	local cards = RewardService.GenerateCards(player)
 	pendingRewardsMap[player] = cards
 
+	-- Phase Shift / Invulnerability and untargetability during Level Up
+	PlayerStatsManager.SetLevelUpPhase(player, true)
+
 	Remotes.GetEvent("LevelUpOptions"):FireClient(player, cards)
+
+	-- Safety auto-select timeout (16 seconds)
+	task.delay(16, function()
+		local pending = pendingRewardsMap[player]
+		if pending and pending[1] then
+			local chosenCard = pending[1]
+			pendingRewardsMap[player] = nil
+			PlayerStatsManager.SetLevelUpPhase(player, false)
+
+			if chosenCard.category == "WEAPON" and chosenCard.weaponId then
+				WeaponService.AddOrUpgradeWeapon(player, chosenCard.weaponId)
+			elseif chosenCard.category == "STAT" and chosenCard.statType and chosenCard.statValue then
+				PlayerStatsManager.AddStat(player, chosenCard.statType, chosenCard.statValue)
+			elseif chosenCard.category == "PASSIVE" and chosenCard.passiveDef then
+				PassiveService.AddPassive(player, chosenCard.passiveDef)
+			end
+		end
+	end)
 end
 
 -- Handle choice response
 local selectRemote = Remotes.GetEvent("SelectLevelUpChoice")
 selectRemote.OnServerEvent:Connect(function(player: Player, choiceIndex: number)
 	local pending = pendingRewardsMap[player]
-	if not pending or not pending[choiceIndex] then return end
+	if not pending or not pending[choiceIndex] then
+		PlayerStatsManager.SetLevelUpPhase(player, false)
+		return
+	end
 
 	local chosenCard = pending[choiceIndex]
 	pendingRewardsMap[player] = nil
+
+	-- Remove invulnerability & restore normal visibility/aggro
+	PlayerStatsManager.SetLevelUpPhase(player, false)
 
 	if chosenCard.category == "WEAPON" and chosenCard.weaponId then
 		WeaponService.AddOrUpgradeWeapon(player, chosenCard.weaponId)
@@ -182,6 +209,7 @@ end)
 
 function RewardService.Cleanup(player: Player)
 	pendingRewardsMap[player] = nil
+	PlayerStatsManager.SetLevelUpPhase(player, false)
 end
 
 Players.PlayerRemoving:Connect(RewardService.Cleanup)
