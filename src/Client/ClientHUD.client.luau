@@ -309,7 +309,7 @@ armorText.TextColor3 = Color3.fromRGB(150, 200, 255)
 armorText.Font = Enum.Font.GothamMedium
 armorText.TextSize = 11
 armorText.TextXAlignment = Enum.TextXAlignment.Left
-armorText.Text = "🛡️ BLINDAGE : 0 ARMURE (0% RÉDUCTION)"
+armorText.Text = "BLINDAGE : 0 ARMURE (0% RÉDUCTION)"
 armorText.Parent = vitalsContainer
 
 -- --- 5. BOTTOM CENTER: OVERDRIVE REACTOR ---
@@ -648,7 +648,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	if data.stats and data.stats.Armor ~= nil then
 		local armor = data.stats.Armor
 		local reduction = math.floor((armor / (armor + 100)) * 100)
-		armorText.Text = string.format("🛡️ BLINDAGE : %.0f ARMURE (%d%% RÉDUCTION)", armor, reduction)
+		armorText.Text = string.format("BLINDAGE : %.0f ARMURE (%d%% RÉDUCTION)", armor, reduction)
 	end
 
 	if data.currentOverdrive ~= nil and data.maxOverdrive ~= nil then
@@ -656,11 +656,11 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		odBarFill.Size = UDim2.new(odRatio, 0, 1, 0)
 
 		if data.isOverdriveActive then
-			odBtn.Text = "⚡ OVERDRIVE ACTIF ! FEU FRÉNÉTIQUE !"
+			odBtn.Text = "OVERDRIVE ACTIF ! FEU FRÉNÉTIQUE !"
 			odBtn.TextColor3 = Color3.fromRGB(255, 50, 80)
 			odBarFill.BackgroundColor3 = Color3.fromRGB(255, 30, 80)
 		elseif odRatio >= 1.0 then
-			odBtn.Text = "⚡ OVERDRIVE PRÊT ! [ESPACE / TOUCHE F]"
+			odBtn.Text = "OVERDRIVE PRÊT ! [ESPACE / TOUCHE F]"
 			odBtn.TextColor3 = Color3.fromRGB(255, 240, 50)
 			odBarFill.BackgroundColor3 = Color3.fromRGB(255, 200, 30)
 		else

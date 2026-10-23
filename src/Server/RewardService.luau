@@ -43,33 +43,33 @@ local WEAPON_IDS = {
 }
 
 local function getPassiveGlyph(pDef: PassivesData.PassiveDefinition): string
-	local tGlyphs: { [string]: string } = {
-		OnEnemyKilled = "💀",
-		OnDamageDealt = "⚔️",
-		OnDamageTaken = "🛡️",
-		OnHeal = "💚",
-		OnMove = "👟",
-		OnStandStill = "🧘",
-		OnCritHit = "🎯",
-		OnLevelUp = "⭐",
-		OnOverdrive = "⚡",
-		OnGainXP = "💎",
+	local tTags: { [string]: string } = {
+		OnEnemyKilled = "KILL",
+		OnDamageDealt = "HIT",
+		OnDamageTaken = "DEF",
+		OnHeal = "HEAL",
+		OnMove = "MOVE",
+		OnStandStill = "STILL",
+		OnCritHit = "CRIT",
+		OnLevelUp = "LVL",
+		OnOverdrive = "OVER",
+		OnGainXP = "XP",
 	}
-	local eGlyphs: { [string]: string } = {
-		Heal = "💚",
-		GainMaxHP = "❤️",
-		GainStatDamage = "💥",
-		GainStatSpeed = "👟",
-		GainStatFireRate = "⚡",
-		GainCritChance = "🎯",
-		GainStatArmor = "🛡️",
-		GainLifeSteal = "🩸",
-		ChargeOverdrive = "⚡",
-		GainXP = "💎",
+	local eTags: { [string]: string } = {
+		Heal = "REPAIR",
+		GainMaxHP = "HP+",
+		GainStatDamage = "DMG+",
+		GainStatSpeed = "SPD+",
+		GainStatFireRate = "CAD+",
+		GainCritChance = "CRT+",
+		GainStatArmor = "ARM+",
+		GainLifeSteal = "DRAIN+",
+		ChargeOverdrive = "OD+",
+		GainXP = "XP+",
 	}
-	local tg = tGlyphs[pDef.trigger] or "⚡"
-	local eg = eGlyphs[pDef.effect] or "✨"
-	return tg .. "➔" .. eg
+	local tg = tTags[pDef.trigger] or "SYS"
+	local eg = eTags[pDef.effect] or "PWR"
+	return string.format("[%s -> %s]", tg, eg)
 end
 
 function RewardService.GenerateCards(player: Player): { RewardCard }
@@ -95,7 +95,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 				icon = wDef.icon,
 				iconFile = wDef.iconFile,
 				tag = wDef.tag or "[ ARME ]",
-				glyph = wDef.glyph or "⚡",
+				glyph = wDef.tag or "[ ARME ]",
 				rarityColor = Color3.fromRGB(0, 200, 255),
 				weaponId = weaponId,
 			})
@@ -121,7 +121,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 						icon = wDef.icon,
 						iconFile = wDef.iconFile,
 						tag = wDef.tag or "[ ARME ]",
-						glyph = wDef.glyph or "⚡",
+						glyph = wDef.tag or "[ ARME ]",
 						rarityColor = Color3.fromRGB(255, 200, 40),
 						weaponId = wId,
 					})
@@ -148,7 +148,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		description = conf.desc,
 		icon = conf.icon,
 		tag = conf.tag or "[ MODULE ]",
-		glyph = conf.glyph or "📈",
+		glyph = conf.tag or "[ MODULE ]",
 		rarityColor = Color3.fromRGB(80, 255, 140),
 		statType = statType,
 		statValue = bonus,
@@ -190,7 +190,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 			description = sConf.desc,
 			icon = sConf.icon,
 			tag = sConf.tag or "[ MODULE ]",
-			glyph = sConf.glyph or "📈",
+			glyph = sConf.tag or "[ MODULE ]",
 			rarityColor = Color3.fromRGB(80, 255, 140),
 			statType = secondStat,
 			statValue = sBonus,
