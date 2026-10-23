@@ -2,3 +2,7 @@
 *.rbxlx
 *.tmp
 .DS_Store
+roblox_config.json
+.env
+temp_*.rbxl
+build_*.rbxl
