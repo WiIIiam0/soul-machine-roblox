@@ -3,6 +3,11 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
+
+-- Disable ClickToMove and ShiftLock to prevent cursor locking / center dot and pathfinding drift
+StarterPlayer.DevComputerMovementMode = Enum.DevComputerMovementMode.KeyboardMouse
+StarterPlayer.EnableMouseLockOption = false
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
