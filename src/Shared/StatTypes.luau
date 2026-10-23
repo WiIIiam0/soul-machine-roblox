@@ -42,10 +42,11 @@ local DEFAULT_STATS: PlayerStats = {
 }
 StatTypes.DEFAULT_STATS = DEFAULT_STATS
 
-local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
+local STAT_CONFIG: { [StatType]: { name: string, icon: string, glyph: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
 	MaxHP = {
 		name = "Points de Vie Max",
 		icon = "rbxassetid://10709791437",
+		glyph = "❤️",
 		perLevelBonus = 20,
 		format = function(v) return string.format("+%.0f PV", v) end,
 		desc = "Augmente les points de vie maximaux de ton Mécha.",
@@ -53,6 +54,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	Speed = {
 		name = "Propulsion / Vitesse",
 		icon = "rbxassetid://10709791130",
+		glyph = "👟",
 		perLevelBonus = 2.0,
 		format = function(v) return string.format("+%.1f Vitesse", v) end,
 		desc = "Permet d'esquiver plus facilement les essaims.",
@@ -60,6 +62,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	DamageMultiplier = {
 		name = "Puissance de Feu",
 		icon = "rbxassetid://10709791557",
+		glyph = "⚔️",
 		perLevelBonus = 0.12,
 		format = function(v) return string.format("+%.0f%% Dégâts", v * 100) end,
 		desc = "Multiplie les dégâts infligés par toutes les armes.",
@@ -67,6 +70,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	FireRateMultiplier = {
 		name = "Cadence de Tir",
 		icon = "rbxassetid://10709791334",
+		glyph = "⚡",
 		perLevelBonus = 0.08,
 		format = function(v) return string.format("+%.0f%% Cadence", v * 100) end,
 		desc = "Réduit le temps de recharge entre chaque rafale.",
@@ -74,6 +78,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	Armor = {
 		name = "Blindage / Armure",
 		icon = "rbxassetid://10709791281",
+		glyph = "🛡️",
 		perLevelBonus = 12,
 		format = function(v) return string.format("+%.0f Armure", v) end,
 		desc = "100 d'armure réduit les dégâts subis de 50%.",
@@ -81,6 +86,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	CriticalChance = {
 		name = "Chances de Critique",
 		icon = "rbxassetid://10709791223",
+		glyph = "🎲",
 		perLevelBonus = 4,
 		format = function(v) return string.format("+%.0f%% Critique", v) end,
 		desc = "Chances d'infliger le double de dégâts (x2).",
@@ -88,6 +94,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	PickupRadius = {
 		name = "Rayon Magnétique",
 		icon = "rbxassetid://10709791054",
+		glyph = "🧲",
 		perLevelBonus = 4,
 		format = function(v) return string.format("+%.0f Studs Rayon", v) end,
 		desc = "Aspire les gemmes d'XP de plus loin.",
@@ -95,6 +102,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	LifeSteal = {
 		name = "Drain d'Énergie",
 		icon = "rbxassetid://10709791480",
+		glyph = "🩸",
 		perLevelBonus = 0.02,
 		format = function(v) return string.format("+%.1f%% Vol de Vie", v * 100) end,
 		desc = "Convertit une partie des dégâts infligés en réparation de coque.",
@@ -102,6 +110,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	BurnDamage = {
 		name = "Surcharge Thermique",
 		icon = "rbxassetid://10709791612",
+		glyph = "🔥",
 		perLevelBonus = 2.0,
 		format = function(v) return string.format("+%.1f Dégâts Brûlure", v) end,
 		desc = "Renforce les dégâts continus de feu par tic.",
@@ -109,6 +118,7 @@ local STAT_CONFIG: { [StatType]: { name: string, icon: string, perLevelBonus: nu
 	RangeMultiplier = {
 		name = "Portée des Radars",
 		icon = "rbxassetid://10709791667",
+		glyph = "🏹",
 		perLevelBonus = 0.15,
 		format = function(v) return string.format("+%.0f%% Portée", v * 100) end,
 		desc = "Permet de verrouiller et toucher les ennemis à plus grande distance.",

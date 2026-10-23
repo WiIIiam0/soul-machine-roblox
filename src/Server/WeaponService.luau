@@ -55,6 +55,13 @@ function WeaponService.AddOrUpgradeWeapon(player: Player, weaponId: string): boo
 		return false -- Maxed out
 	end
 
+	-- RULE: When unlocking the first real weapon (not StarterGun), remove StarterGun!
+	if weaponId ~= "StarterGun" and state.weapons["StarterGun"] ~= nil then
+		state.weapons["StarterGun"] = nil
+		state.cooldowns["StarterGun"] = nil
+		print(string.format("[WeaponService] First real weapon '%s' acquired by %s: StarterGun removed!", weaponId, player.Name))
+	end
+
 	state.weapons[weaponId] = currentRank + 1
 	if not state.cooldowns[weaponId] then
 		state.cooldowns[weaponId] = 0

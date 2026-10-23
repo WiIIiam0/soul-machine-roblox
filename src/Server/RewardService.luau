@@ -21,6 +21,7 @@ export type RewardCard = {
 	subtitle: string,
 	description: string,
 	icon: string,
+	glyph: string?,
 	rarityColor: Color3,
 	weaponId: string?,
 	statType: StatTypes.StatType?,
@@ -38,6 +39,36 @@ local STAT_LIST: { StatTypes.StatType } = {
 local WEAPON_IDS = {
 	"Rifle", "Pompe", "Eventail", "Rocket", "DarkStorm", "FireMissile", "MissileMultiShot", "Taser",
 }
+
+local function getPassiveGlyph(pDef: PassivesData.PassiveDefinition): string
+	local tGlyphs: { [string]: string } = {
+		OnEnemyKilled = "💀",
+		OnDamageDealt = "⚔️",
+		OnDamageTaken = "🛡️",
+		OnHeal = "💚",
+		OnMove = "👟",
+		OnStandStill = "🧘",
+		OnCritHit = "🎯",
+		OnLevelUp = "⭐",
+		OnOverdrive = "⚡",
+		OnGainXP = "💎",
+	}
+	local eGlyphs: { [string]: string } = {
+		Heal = "💚",
+		GainMaxHP = "❤️",
+		GainStatDamage = "💥",
+		GainStatSpeed = "👟",
+		GainStatFireRate = "⚡",
+		GainCritChance = "🎯",
+		GainStatArmor = "🛡️",
+		GainLifeSteal = "🩸",
+		ChargeOverdrive = "⚡",
+		GainXP = "💎",
+	}
+	local tg = tGlyphs[pDef.trigger] or "⚡"
+	local eg = eGlyphs[pDef.effect] or "✨"
+	return tg .. "➔" .. eg
+end
 
 function RewardService.GenerateCards(player: Player): { RewardCard }
 	local cards: { RewardCard } = {}
@@ -60,6 +91,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 				subtitle = string.format("AMÉLIORATION : RANG %d ➔ %d", rank, rank + 1),
 				description = string.format("Dégâts: %.0f | Projectiles: %d | Cadence: %.2fs", nextRank.damage, nextRank.projectileCount, nextRank.fireRate),
 				icon = wDef.icon,
+				glyph = wDef.glyph or "🔫",
 				rarityColor = Color3.fromRGB(0, 200, 255),
 				weaponId = weaponId,
 			})
@@ -83,6 +115,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 						subtitle = "AJOUTER À L'ARSENAL",
 						description = wDef.description,
 						icon = wDef.icon,
+						glyph = wDef.glyph or "🔫",
 						rarityColor = Color3.fromRGB(255, 200, 40),
 						weaponId = wId,
 					})
@@ -108,6 +141,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		subtitle = conf.format(bonus),
 		description = conf.desc,
 		icon = conf.icon,
+		glyph = conf.glyph or "📈",
 		rarityColor = Color3.fromRGB(80, 255, 140),
 		statType = statType,
 		statValue = bonus,
@@ -130,6 +164,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 			subtitle = "MODULE PASSIF RÉACTIF",
 			description = passDef.description,
 			icon = passDef.icon,
+			glyph = getPassiveGlyph(passDef),
 			rarityColor = Color3.fromRGB(220, 80, 255),
 			passiveDef = passDef,
 		})
@@ -146,6 +181,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 			subtitle = sConf.format(sBonus),
 			description = sConf.desc,
 			icon = sConf.icon,
+			glyph = sConf.glyph or "📈",
 			rarityColor = Color3.fromRGB(80, 255, 140),
 			statType = secondStat,
 			statValue = sBonus,
