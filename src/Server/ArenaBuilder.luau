@@ -314,22 +314,33 @@ function ArenaBuilder.BuildArena()
 
 	arena.Parent = Workspace
 
-	-- 8. Éclairage Sci-Fi
-	Lighting.ClockTime = 20.5
-	Lighting.Brightness = 1.2
-	Lighting.Ambient = Color3.fromRGB(35, 40, 55)
-	Lighting.OutdoorAmbient = Color3.fromRGB(20, 25, 40)
-	Lighting.FogColor = Color3.fromRGB(10, 14, 25)
-	Lighting.FogStart = 120
-	Lighting.FogEnd = 300
+	-- 8. Éclairage Sci-Fi Lumineux & Net (fidèle à Unity Directional Light Intensity 2.0)
+	Lighting.ClockTime = 14.0
+	Lighting.Brightness = 2.4
+	Lighting.Ambient = Color3.fromRGB(130, 135, 145)
+	Lighting.OutdoorAmbient = Color3.fromRGB(140, 145, 160)
+	Lighting.FogColor = Color3.fromRGB(180, 200, 220)
+	Lighting.FogStart = 500
+	Lighting.FogEnd = 1200
+	Lighting.GlobalShadows = true
+	Lighting.EnvironmentDiffuseScale = 0.8
+	Lighting.EnvironmentSpecularScale = 0.8
 
 	local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
 	if not bloom then
 		bloom = Instance.new("BloomEffect")
-		bloom.Intensity = 1.2
-		bloom.Size = 24
-		bloom.Threshold = 0.85
+		bloom.Intensity = 0.5
+		bloom.Size = 16
+		bloom.Threshold = 0.9
 		bloom.Parent = Lighting
+	end
+
+	local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+	if not cc then
+		cc = Instance.new("ColorCorrectionEffect")
+		cc.Contrast = 0.08
+		cc.Saturation = 0.12
+		cc.Parent = Lighting
 	end
 end
 

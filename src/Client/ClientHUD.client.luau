@@ -497,70 +497,172 @@ local function populateRowSlots(
 	end
 end
 
--- --- 4. BOTTOM LEFT: HEALTH & SHIELD ---
+-- --- 4. FLOATING OVERHEAD VITALS (Mirroring Unity UIManager.cs floatingHealthBar, floatingXpBar, floatingOverdriveBar) ---
+local overheadGui: BillboardGui? = nil
+local overheadHpFill: Frame? = nil
+local overheadHpNotches: Frame? = nil
+local overheadXpFill: Frame? = nil
+local overheadXpNotches: Frame? = nil
+local overheadOdFill: Frame? = nil
+
+local lastExpectedHpNotches = -1
+local function updateHpNotches(maxHp: number)
+	local notchesCount = math.floor(maxHp / 20)
+	if notchesCount == lastExpectedHpNotches or not overheadHpNotches then return end
+	lastExpectedHpNotches = notchesCount
+	overheadHpNotches:ClearAllChildren()
+	for i = 1, notchesCount - 1 do
+		local line = Instance.new("Frame")
+		line.Size = UDim2.new(0, 1, 1, 0)
+		line.Position = UDim2.new(i / notchesCount, 0, 0, 0)
+		line.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		line.BackgroundTransparency = 0.4
+		line.BorderSizePixel = 0
+		line.Parent = overheadHpNotches
+	end
+end
+
+local lastExpectedXpNotches = -1
+local function updateXpNotches(maxXp: number)
+	local notchesCount = math.floor(maxXp / 10)
+	if notchesCount == lastExpectedXpNotches or not overheadXpNotches then return end
+	lastExpectedXpNotches = notchesCount
+	overheadXpNotches:ClearAllChildren()
+	for i = 1, notchesCount - 1 do
+		local line = Instance.new("Frame")
+		line.Size = UDim2.new(0, 1, 1, 0)
+		line.Position = UDim2.new(i / notchesCount, 0, 0, 0)
+		line.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+		line.BackgroundTransparency = 0.5
+		line.BorderSizePixel = 0
+		line.Parent = overheadXpNotches
+	end
+end
+
+local function setupOverheadVitals(char: Model)
+	local hrp = char:WaitForChild("HumanoidRootPart", 10) :: BasePart?
+	if not hrp then return end
+
+	local old = hrp:FindFirstChild("PlayerFloatingVitals")
+	if old then old:Destroy() end
+
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "PlayerFloatingVitals"
+	bb.Adornee = hrp
+	bb.Size = UDim2.new(0, 85, 0, 22)
+	bb.StudsOffset = Vector3.new(0, 3.8, 0)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 200
+	bb.ResetOnSpawn = false
+	bb.Parent = hrp
+
+	local list = Instance.new("UIListLayout")
+	list.FillDirection = Enum.FillDirection.Vertical
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, 2)
+	list.Parent = bb
+
+	-- 1. Health Bar (top, 8px)
+	local hpBg = Instance.new("Frame")
+	hpBg.Name = "HPBar"
+	hpBg.LayoutOrder = 1
+	hpBg.Size = UDim2.new(1, 0, 0, 8)
+	hpBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+	hpBg.BorderSizePixel = 0
+	hpBg.Parent = bb
+
+	local hpCorner = Instance.new("UICorner")
+	hpCorner.CornerRadius = UDim.new(0, 2)
+	hpCorner.Parent = hpBg
+
+	local hpFill = Instance.new("Frame")
+	hpFill.Name = "Fill"
+	hpFill.Size = UDim2.new(1, 0, 1, 0)
+	hpFill.BackgroundColor3 = Color3.fromRGB(50, 220, 70)
+	hpFill.BorderSizePixel = 0
+	hpFill.Parent = hpBg
+
+	local hpFillCorner = Instance.new("UICorner")
+	hpFillCorner.CornerRadius = UDim.new(0, 2)
+	hpFillCorner.Parent = hpFill
+
+	local hpNotches = Instance.new("Frame")
+	hpNotches.Name = "Notches"
+	hpNotches.Size = UDim2.new(1, 0, 1, 0)
+	hpNotches.BackgroundTransparency = 1
+	hpNotches.Parent = hpBg
+
+	-- 2. XP Bar (middle, 4px)
+	local xpBg = Instance.new("Frame")
+	xpBg.Name = "XPBar"
+	xpBg.LayoutOrder = 2
+	xpBg.Size = UDim2.new(1, 0, 0, 4)
+	xpBg.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
+	xpBg.BorderSizePixel = 0
+	xpBg.Parent = bb
+
+	local xpCorner = Instance.new("UICorner")
+	xpCorner.CornerRadius = UDim.new(0, 2)
+	xpCorner.Parent = xpBg
+
+	local xpFill = Instance.new("Frame")
+	xpFill.Name = "Fill"
+	xpFill.Size = UDim2.new(0, 0, 1, 0)
+	xpFill.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+	xpFill.BorderSizePixel = 0
+	xpFill.Parent = xpBg
+
+	local xpNotches = Instance.new("Frame")
+	xpNotches.Name = "Notches"
+	xpNotches.Size = UDim2.new(1, 0, 1, 0)
+	xpNotches.BackgroundTransparency = 1
+	xpNotches.Parent = xpBg
+
+	-- 3. Overdrive Bar (bottom, 4px)
+	local odBg = Instance.new("Frame")
+	odBg.Name = "ODBar"
+	odBg.LayoutOrder = 3
+	odBg.Size = UDim2.new(1, 0, 0, 4)
+	odBg.BackgroundColor3 = Color3.fromRGB(20, 15, 10)
+	odBg.BorderSizePixel = 0
+	odBg.Parent = bb
+
+	local odCorner = Instance.new("UICorner")
+	odCorner.CornerRadius = UDim.new(0, 2)
+	odCorner.Parent = odBg
+
+	local odFill = Instance.new("Frame")
+	odFill.Name = "Fill"
+	odFill.Size = UDim2.new(0, 0, 1, 0)
+	odFill.BackgroundColor3 = Color3.fromRGB(255, 140, 20)
+	odFill.BorderSizePixel = 0
+	odFill.Parent = odBg
+
+	overheadGui = bb
+	overheadHpFill = hpFill
+	overheadHpNotches = hpNotches
+	overheadXpFill = xpFill
+	overheadXpNotches = xpNotches
+	overheadOdFill = odFill
+	lastExpectedHpNotches = -1
+	lastExpectedXpNotches = -1
+end
+
+if player.Character then
+	setupOverheadVitals(player.Character)
+end
+player.CharacterAdded:Connect(setupOverheadVitals)
+
+-- Minimal Vitals Container (Invisible by default to leave the screen clean like Unity)
 local vitalsContainer = Instance.new("Frame")
 vitalsContainer.Name = "VitalsContainer"
-vitalsContainer.Size = UDim2.new(0, 260, 0, 60)
-vitalsContainer.Position = UDim2.new(0, 24, 1, -84)
-vitalsContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
-vitalsContainer.BackgroundTransparency = 0.25
-vitalsContainer.BorderSizePixel = 0
+vitalsContainer.Visible = false
 vitalsContainer.Parent = screenGui
 
-local vitalsCorner = Instance.new("UICorner")
-vitalsCorner.CornerRadius = UDim.new(0, 8)
-vitalsCorner.Parent = vitalsContainer
-
-local vitalsStroke = Instance.new("UIStroke")
-vitalsStroke.Color = Color3.fromRGB(0, 200, 255)
-vitalsStroke.Thickness = 1.5
-vitalsStroke.Transparency = 0.4
-vitalsStroke.Parent = vitalsContainer
-
 local hpBarBg = Instance.new("Frame")
-hpBarBg.Name = "HPBarBg"
-hpBarBg.Size = UDim2.new(1, -20, 0, 18)
-hpBarBg.Position = UDim2.new(0, 10, 0, 8)
-hpBarBg.BackgroundColor3 = Color3.fromRGB(25, 10, 10)
-hpBarBg.BorderSizePixel = 0
-hpBarBg.Parent = vitalsContainer
-
-local hpCorner = Instance.new("UICorner")
-hpCorner.CornerRadius = UDim.new(0, 5)
-hpCorner.Parent = hpBarBg
-
 local hpBarFill = Instance.new("Frame")
-hpBarFill.Name = "Fill"
-hpBarFill.Size = UDim2.new(1, 0, 1, 0)
-hpBarFill.BackgroundColor3 = Color3.fromRGB(50, 220, 70)
-hpBarFill.BorderSizePixel = 0
-hpBarFill.Parent = hpBarBg
-
-local hpFillCorner = Instance.new("UICorner")
-hpFillCorner.CornerRadius = UDim.new(0, 5)
-hpFillCorner.Parent = hpBarFill
-
 local hpText = Instance.new("TextLabel")
-hpText.Name = "HPText"
-hpText.Size = UDim2.new(1, 0, 1, 0)
-hpText.BackgroundTransparency = 1
-hpText.TextColor3 = Color3.fromRGB(255, 255, 255)
-hpText.Font = Enum.Font.GothamBold
-hpText.TextSize = 11
-hpText.Text = "100 / 100 PV"
-hpText.Parent = hpBarBg
-
 local armorText = Instance.new("TextLabel")
-armorText.Name = "ArmorText"
-armorText.Size = UDim2.new(1, -20, 0, 20)
-armorText.Position = UDim2.new(0, 10, 0, 32)
-armorText.BackgroundTransparency = 1
-armorText.TextColor3 = Color3.fromRGB(150, 200, 255)
-armorText.Font = Enum.Font.GothamMedium
-armorText.TextSize = 11
-armorText.TextXAlignment = Enum.TextXAlignment.Left
-armorText.Text = "BLINDAGE : 0 ARMURE (0% RÉDUCTION)"
-armorText.Parent = vitalsContainer
 
 -- --- 5. BOTTOM CENTER: OVERDRIVE REACTOR ---
 local odContainer = Instance.new("Frame")
@@ -1386,6 +1488,12 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		hpBarFill.Size = UDim2.new(hpRatio, 0, 1, 0)
 		hpText.Text = string.format("%.0f / %.0f PV", data.currentHP, data.maxHP)
 
+		if overheadHpFill then
+			overheadHpFill.Size = UDim2.new(hpRatio, 0, 1, 0)
+			overheadHpFill.BackgroundColor3 = if hpRatio < 0.3 then Color3.fromRGB(255, 50, 50) else Color3.fromRGB(50, 220, 70)
+		end
+		updateHpNotches(data.maxHP)
+
 		if data.currentHP <= 0 then
 			gameOverModal.Visible = true
 		end
@@ -1400,6 +1508,17 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	if data.currentOverdrive ~= nil and data.maxOverdrive ~= nil then
 		local odRatio = math.clamp(data.currentOverdrive / data.maxOverdrive, 0, 1)
 		odBarFill.Size = UDim2.new(odRatio, 0, 1, 0)
+
+		if overheadOdFill then
+			overheadOdFill.Size = UDim2.new(odRatio, 0, 1, 0)
+			if data.isOverdriveActive then
+				overheadOdFill.BackgroundColor3 = Color3.fromRGB(255, 40, 90)
+			elseif odRatio >= 1.0 then
+				overheadOdFill.BackgroundColor3 = Color3.fromRGB(255, 220, 40)
+			else
+				overheadOdFill.BackgroundColor3 = Color3.fromRGB(255, 140, 20)
+			end
+		end
 
 		if data.isOverdriveActive then
 			odBtn.Text = "OVERDRIVE ACTIF ! FEU FRÉNÉTIQUE !"
@@ -1421,6 +1540,11 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		local xpRatio = math.clamp(data.currentXP / data.xpToNextLevel, 0, 1)
 		xpBarFill.Size = UDim2.new(xpRatio, 0, 1, 0)
 		xpText.Text = string.format("%.0f / %.0f XP", data.currentXP, data.xpToNextLevel)
+
+		if overheadXpFill then
+			overheadXpFill.Size = UDim2.new(xpRatio, 0, 1, 0)
+		end
+		updateXpNotches(data.xpToNextLevel)
 	end
 
 	if data.wave then

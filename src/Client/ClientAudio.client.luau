@@ -164,16 +164,9 @@ vfxEvent.OnClientEvent:Connect(function(eventType: string, ...: any)
 	end
 end)
 
--- --- 3. STATE SYNC (PLAYER HURT, LEVEL UP, GAME OVER) ---
-local lastHealth: number? = nil
-
-Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
-	if data.currentHP and data.maxHP then
-		if lastHealth ~= nil and data.currentHP < lastHealth then
-			playSFX("PlayerHit", "impactMetal_000", 0.45, 0.95 + math.random() * 0.1)
-		end
-		lastHealth = data.currentHP
-	end
+-- --- 3. STATE SYNC (LEVEL UP, GAME OVER) ---
+-- (Note: En accord avec Unity PlayerManager.cs, aucun bruitage de dégâts répétitif n'est joué sur chaque coup)
+Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(_data: any)
 end)
 
 -- Level-up card screen audio
