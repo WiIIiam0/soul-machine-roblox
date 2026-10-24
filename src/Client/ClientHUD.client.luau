@@ -17,44 +17,33 @@ local WeaponsData = require(Shared:WaitForChild("WeaponsData"))
 local StatTypes = require(Shared:WaitForChild("StatTypes"))
 local MetaProgressionData = require(Shared:WaitForChild("MetaProgressionData"))
 
--- Create Main ScreenGui
+-- Create Main ScreenGui (respects Roblox TopBar so HUD elements NEVER overlap Roblox buttons)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SoulMachineHUD"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.IgnoreGuiInset = true
+screenGui.IgnoreGuiInset = false
 screenGui.Parent = playerGui
+
+-- Dedicated Fullscreen VFX ScreenGui (covers true physical screen without clipping)
+local vfxGui = Instance.new("ScreenGui")
+vfxGui.Name = "SoulMachineVFX"
+vfxGui.ResetOnSpawn = false
+vfxGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+vfxGui.IgnoreGuiInset = true
+vfxGui.Parent = playerGui
 
 -- --- MASTER RESPONSIVE SCALING ENGINE (UIScale) ---
 local masterScale = Instance.new("UIScale")
 masterScale.Name = "MasterScale"
 masterScale.Parent = screenGui
 
-local function updateResponsiveScale()
+local function isPortraitMode(): boolean
 	local cam = Workspace.CurrentCamera
-	if not cam then return end
+	if not cam then return false end
 	local vp = cam.ViewportSize
-	if vp.X <= 0 or vp.Y <= 0 then return end
-
-	-- Base reference resolution: 1366 x 768
-	local scaleX = vp.X / 1366
-	local scaleY = vp.Y / 768
-	local factor = math.clamp(math.min(scaleX, scaleY), 0.55, 1.35)
-	masterScale.Scale = factor
+	return (vp.X < vp.Y) or (vp.X < 720)
 end
-
-local camera = Workspace.CurrentCamera
-if camera then
-	camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
-	updateResponsiveScale()
-end
-Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-	local newCam = Workspace.CurrentCamera
-	if newCam then
-		newCam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
-		updateResponsiveScale()
-	end
-end)
 
 -- --- 1. FULLSCREEN DAMAGE FLASH (Vignette) ---
 local damageFlash = Instance.new("Frame")
@@ -64,7 +53,7 @@ damageFlash.BackgroundColor3 = Color3.fromRGB(220, 20, 30)
 damageFlash.BackgroundTransparency = 1
 damageFlash.BorderSizePixel = 0
 damageFlash.ZIndex = 50
-damageFlash.Parent = screenGui
+damageFlash.Parent = vfxGui
 
 local function triggerDamageFlash()
 	damageFlash.BackgroundTransparency = 0.65
@@ -683,157 +672,440 @@ cardsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 cardsLayout.Padding = UDim.new(0, 22)
 cardsLayout.Parent = cardsHolder
 
+-- --- MASTER RESPONSIVE LAYOUT ENGINE (Portrait Mobile & Landscape PC) ---
+local function applyResponsiveLayout()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vp = cam.ViewportSize
+	if vp.X <= 0 or vp.Y <= 0 then return end
+
+	local isPortrait = (vp.X < vp.Y) or (vp.X < 720)
+
+	if isPortrait then
+		-- Mobile Portrait Adaptive Scale
+		masterScale.Scale = math.clamp(vp.X / 440, 0.72, 1.15)
+
+		-- Top-Center In-Run Bar
+		topBarContainer.AnchorPoint = Vector2.new(0.5, 0)
+		topBarContainer.Position = UDim2.new(0.5, 0, 0, 4)
+		topBarContainer.Size = UDim2.new(0.96, 0, 0, 38)
+		levelBadge.Size = UDim2.new(0, 56, 1, 0)
+		levelBadge.TextSize = 11
+		xpBarBg.Position = UDim2.new(0, 60, 0.5, -6)
+		xpBarBg.Size = UDim2.new(1, -195, 0, 12)
+		waveInfoLabel.Size = UDim2.new(0, 130, 1, 0)
+		waveInfoLabel.Position = UDim2.new(1, -132, 0, 0)
+		waveInfoLabel.TextSize = 9
+
+		-- Meta Progression Bar
+		metaBarContainer.AnchorPoint = Vector2.new(0.5, 0)
+		metaBarContainer.Position = UDim2.new(0.5, 0, 0, 44)
+		metaBarContainer.Size = UDim2.new(0.96, 0, 0, 22)
+		metaLevelLabel.Size = UDim2.new(0, 95, 1, 0)
+		metaLevelLabel.TextSize = 9
+		metaXPBarBg.Position = UDim2.new(0, 100, 0.5, -4)
+		metaXPBarBg.Size = UDim2.new(1, -195, 0, 8)
+		metaSlotsLabel.Size = UDim2.new(0, 90, 1, 0)
+		metaSlotsLabel.Position = UDim2.new(1, -92, 0, 0)
+		metaSlotsLabel.TextSize = 8
+
+		-- 3-Row Inventory (Centered below Meta Bar)
+		invContainer.AnchorPoint = Vector2.new(0.5, 0)
+		invContainer.Position = UDim2.new(0.5, 0, 0, 70)
+		invContainer.Size = UDim2.new(0.96, 0, 0, 102)
+
+		-- Vitals Bar (Bottom Left)
+		vitalsContainer.AnchorPoint = Vector2.new(0, 1)
+		vitalsContainer.Position = UDim2.new(0, 8, 1, -8)
+		vitalsContainer.Size = UDim2.new(0.52, 0, 0, 52)
+		hpBarBg.Size = UDim2.new(1, -16, 0, 15)
+		hpBarBg.Position = UDim2.new(0, 8, 0, 6)
+		hpText.TextSize = 10
+		armorText.Position = UDim2.new(0, 8, 0, 26)
+		armorText.TextSize = 9
+
+		-- Overdrive Reactor (Bottom Right)
+		odContainer.AnchorPoint = Vector2.new(1, 1)
+		odContainer.Position = UDim2.new(1, -8, 1, -8)
+		odContainer.Size = UDim2.new(0.44, 0, 0, 52)
+		odBarBg.Size = UDim2.new(1, -14, 0, 15)
+		odBarBg.Position = UDim2.new(0, 7, 0, 6)
+		odBtn.Position = UDim2.new(0, 7, 0, 24)
+		odBtn.TextSize = 9
+
+		-- Level Up Modal Title & Cards
+		modalTitle.Position = UDim2.new(0.5, 0, 0, 16)
+		modalTitle.TextSize = 22
+		subtitleLabel.Position = UDim2.new(0.5, 0, 0, 44)
+		subtitleLabel.TextSize = 12
+		timerContainer.Position = UDim2.new(0.5, 0, 0, 72)
+		timerContainer.Size = UDim2.new(0.90, 0, 0, 20)
+
+		cardsHolder.AnchorPoint = Vector2.new(0.5, 0)
+		cardsHolder.Position = UDim2.new(0.5, 0, 0, 98)
+		cardsHolder.Size = UDim2.new(0.96, 0, 1, -106)
+		cardsLayout.FillDirection = Enum.FillDirection.Vertical
+		cardsLayout.Padding = UDim.new(0, 8)
+
+	else
+		-- Desktop / Landscape Reference Scale
+		local scaleX = vp.X / 1366
+		local scaleY = vp.Y / 768
+		masterScale.Scale = math.clamp(math.min(scaleX, scaleY), 0.65, 1.35)
+
+		-- Top-Center In-Run Bar
+		topBarContainer.AnchorPoint = Vector2.new(0.5, 0)
+		topBarContainer.Position = UDim2.new(0.5, 0, 0, 14)
+		topBarContainer.Size = UDim2.new(0, 480, 0, 44)
+		levelBadge.Size = UDim2.new(0, 75, 1, 0)
+		levelBadge.TextSize = 13
+		xpBarBg.Position = UDim2.new(0, 80, 0.5, -7)
+		xpBarBg.Size = UDim2.new(1, -250, 0, 14)
+		waveInfoLabel.Size = UDim2.new(0, 165, 1, 0)
+		waveInfoLabel.Position = UDim2.new(1, -170, 0, 0)
+		waveInfoLabel.TextSize = 11
+
+		-- Meta Progression Bar
+		metaBarContainer.AnchorPoint = Vector2.new(0.5, 0)
+		metaBarContainer.Position = UDim2.new(0.5, 0, 0, 64)
+		metaBarContainer.Size = UDim2.new(0, 480, 0, 24)
+		metaLevelLabel.Size = UDim2.new(0, 125, 1, 0)
+		metaLevelLabel.TextSize = 10
+		metaXPBarBg.Position = UDim2.new(0, 130, 0.5, -5)
+		metaXPBarBg.Size = UDim2.new(1, -255, 0, 10)
+		metaSlotsLabel.Size = UDim2.new(0, 120, 1, 0)
+		metaSlotsLabel.Position = UDim2.new(1, -125, 0, 0)
+		metaSlotsLabel.TextSize = 9
+
+		-- 3-Row Inventory (Top Left)
+		invContainer.AnchorPoint = Vector2.new(0, 0)
+		invContainer.Position = UDim2.new(0, 18, 0, 14)
+		invContainer.Size = UDim2.new(0, 310, 0, 134)
+
+		-- Vitals Bar (Bottom Left)
+		vitalsContainer.AnchorPoint = Vector2.new(0, 1)
+		vitalsContainer.Position = UDim2.new(0, 24, 1, -24)
+		vitalsContainer.Size = UDim2.new(0, 260, 0, 60)
+		hpBarBg.Size = UDim2.new(1, -20, 0, 18)
+		hpBarBg.Position = UDim2.new(0, 10, 0, 8)
+		hpText.TextSize = 11
+		armorText.Position = UDim2.new(0, 10, 0, 32)
+		armorText.TextSize = 11
+
+		-- Overdrive Reactor (Bottom Center)
+		odContainer.AnchorPoint = Vector2.new(0.5, 1)
+		odContainer.Position = UDim2.new(0.5, 0, 1, -24)
+		odContainer.Size = UDim2.new(0, 320, 0, 52)
+		odBarBg.Size = UDim2.new(1, -20, 0, 18)
+		odBarBg.Position = UDim2.new(0, 10, 0, 8)
+		odBtn.Position = UDim2.new(0, 10, 0, 28)
+		odBtn.TextSize = 11
+
+		-- Level Up Modal Title & Cards
+		modalTitle.Position = UDim2.new(0.5, 0, 0, 36)
+		modalTitle.TextSize = 32
+		subtitleLabel.Position = UDim2.new(0.5, 0, 0, 78)
+		subtitleLabel.TextSize = 15
+		timerContainer.Position = UDim2.new(0.5, 0, 0, 106)
+		timerContainer.Size = UDim2.new(0, 340, 0, 24)
+
+		cardsHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+		cardsHolder.Position = UDim2.new(0.5, 0, 0.58, 0)
+		cardsHolder.Size = UDim2.new(0, 940, 0, 420)
+		cardsLayout.FillDirection = Enum.FillDirection.Horizontal
+		cardsLayout.Padding = UDim.new(0, 22)
+	end
+end
+
+local camera = Workspace.CurrentCamera
+if camera then
+	camera:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+	applyResponsiveLayout()
+end
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	local newCam = Workspace.CurrentCamera
+	if newCam then
+		newCam:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+		applyResponsiveLayout()
+	end
+end)
+
 local countdownRemaining = 15.0
 local countdownActive = false
 
 local function createChoiceCard(index: number, cardData: any): Frame
+	local isPortrait = isPortraitMode()
+
 	local card = Instance.new("Frame")
 	card.Name = "Card_" .. index
-	card.Size = UDim2.new(0, 280, 0, 400)
 	card.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
 	card.BackgroundTransparency = 0.1
 	card.BorderSizePixel = 0
 	card.Parent = cardsHolder
 
 	local cCorner = Instance.new("UICorner")
-	cCorner.CornerRadius = UDim.new(0, 20)
+	cCorner.CornerRadius = UDim.new(0, if isPortrait then 12 else 20)
 	cCorner.Parent = card
 
 	local cStroke = Instance.new("UIStroke")
 	cStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
-	cStroke.Thickness = 2.5
+	cStroke.Thickness = 2.0
 	cStroke.Parent = card
 
-	-- Floating Category Badge on top border (-14px)
-	local categoryBadge = Instance.new("TextLabel")
-	categoryBadge.Name = "CategoryBadge"
-	categoryBadge.Size = UDim2.new(0, 130, 0, 28)
-	categoryBadge.Position = UDim2.new(0.5, -65, 0, -14)
-	categoryBadge.BackgroundColor3 = Color3.fromRGB(10, 20, 30)
-	categoryBadge.TextColor3 = cardData.rarityColor or Color3.fromRGB(255, 255, 255)
-	categoryBadge.Font = Enum.Font.GothamBlack
-	categoryBadge.TextSize = 11
-	categoryBadge.Text = cardData.category or "UPGRADE"
-	categoryBadge.Parent = card
+	if isPortrait then
+		-- Mobile Portrait Card (Horizontal banner style)
+		card.Size = UDim2.new(1, 0, 0, 106)
 
-	local catCorner = Instance.new("UICorner")
-	catCorner.CornerRadius = UDim.new(0, 8)
-	catCorner.Parent = categoryBadge
+		-- Category Badge (Top Left)
+		local categoryBadge = Instance.new("TextLabel")
+		categoryBadge.Name = "CategoryBadge"
+		categoryBadge.Size = UDim2.new(0, 75, 0, 16)
+		categoryBadge.Position = UDim2.new(0, 10, 0, 6)
+		categoryBadge.BackgroundColor3 = Color3.fromRGB(10, 20, 30)
+		categoryBadge.TextColor3 = cardData.rarityColor or Color3.fromRGB(255, 255, 255)
+		categoryBadge.Font = Enum.Font.GothamBlack
+		categoryBadge.TextSize = 9
+		categoryBadge.Text = cardData.category or "UPGRADE"
+		categoryBadge.Parent = card
 
-	local catStroke = Instance.new("UIStroke")
-	catStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
-	catStroke.Thickness = 1.5
-	catStroke.Parent = categoryBadge
+		local catCorner = Instance.new("UICorner")
+		catCorner.CornerRadius = UDim.new(0, 4)
+		catCorner.Parent = categoryBadge
 
-	-- Card Title
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.Size = UDim2.new(1, -24, 0, 48)
-	title.Position = UDim2.new(0, 12, 0, 28)
-	title.BackgroundTransparency = 1
-	title.TextColor3 = Color3.fromRGB(255, 255, 255)
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 16
-	title.TextWrapped = true
-	title.Text = cardData.title
-	title.Parent = card
+		-- Icon Box (Left side)
+		local iconBox = Instance.new("Frame")
+		iconBox.Name = "IconBox"
+		iconBox.Size = UDim2.new(0, 58, 0, 58)
+		iconBox.Position = UDim2.new(0, 10, 0, 28)
+		iconBox.BackgroundColor3 = Color3.fromRGB(10, 20, 40)
+		iconBox.BorderSizePixel = 0
+		iconBox.Parent = card
 
-	-- Icon Box
-	local iconBox = Instance.new("Frame")
-	iconBox.Name = "IconBox"
-	iconBox.Size = UDim2.new(0, 80, 0, 80)
-	iconBox.Position = UDim2.new(0.5, -40, 0, 86)
-	iconBox.BackgroundColor3 = Color3.fromRGB(10, 20, 40)
-	iconBox.BorderSizePixel = 0
-	iconBox.Parent = card
+		local iCorner = Instance.new("UICorner")
+		iCorner.CornerRadius = UDim.new(0, 8)
+		iCorner.Parent = iconBox
 
-	local iCorner = Instance.new("UICorner")
-	iCorner.CornerRadius = UDim.new(0, 14)
-	iCorner.Parent = iconBox
+		local iStroke = Instance.new("UIStroke")
+		iStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
+		iStroke.Thickness = 1.5
+		iStroke.Parent = iconBox
 
-	local iStroke = Instance.new("UIStroke")
-	iStroke.Color = cardData.rarityColor
-	iStroke.Thickness = 2
-	iStroke.Transparency = 0.3
-	iStroke.Parent = iconBox
+		local iconBadge = Instance.new("TextLabel")
+		iconBadge.Name = "IconBadge"
+		iconBadge.Size = UDim2.new(1, -4, 1, -4)
+		iconBadge.Position = UDim2.new(0, 2, 0, 2)
+		iconBadge.BackgroundTransparency = 1
+		iconBadge.Text = cardData.tag or string.sub(cardData.title, 1, 10):upper()
+		iconBadge.TextColor3 = cardData.rarityColor
+		iconBadge.Font = Enum.Font.GothamBlack
+		iconBadge.TextSize = 9
+		iconBadge.TextWrapped = true
+		iconBadge.ZIndex = 1
+		iconBadge.Parent = iconBox
 
-	local iconBadge = Instance.new("TextLabel")
-	iconBadge.Name = "IconBadge"
-	iconBadge.Size = UDim2.new(1, -8, 1, -8)
-	iconBadge.Position = UDim2.new(0, 4, 0, 4)
-	iconBadge.BackgroundTransparency = 1
-	iconBadge.Text = cardData.tag or string.sub(cardData.title, 1, 12):upper()
-	iconBadge.TextColor3 = cardData.rarityColor
-	iconBadge.Font = Enum.Font.GothamBlack
-	iconBadge.TextSize = 11
-	iconBadge.TextWrapped = true
-	iconBadge.ZIndex = 1
-	iconBadge.Parent = iconBox
+		local resolvedImage = resolveTexture(cardData.iconFile, cardData.icon)
+		if resolvedImage and resolvedImage ~= "" then
+			local iconImg = Instance.new("ImageLabel")
+			iconImg.Size = UDim2.new(1, -6, 1, -6)
+			iconImg.Position = UDim2.new(0, 3, 0, 3)
+			iconImg.BackgroundTransparency = 1
+			iconImg.Image = resolvedImage
+			iconImg.ZIndex = 2
+			iconImg.Parent = iconBox
+			iconBadge.Visible = false
+		end
 
-	-- Resolve real PNG texture
-	local resolvedImage = resolveTexture(cardData.iconFile, cardData.icon)
-	if resolvedImage and resolvedImage ~= "" then
-		local iconImg = Instance.new("ImageLabel")
-		iconImg.Size = UDim2.new(1, -10, 1, -10)
-		iconImg.Position = UDim2.new(0, 5, 0, 5)
-		iconImg.BackgroundTransparency = 1
-		iconImg.Image = resolvedImage
-		iconImg.ZIndex = 2
-		iconImg.Parent = iconBox
-		iconBadge.Visible = false
+		-- Title
+		local title = Instance.new("TextLabel")
+		title.Name = "Title"
+		title.Size = UDim2.new(1, -195, 0, 18)
+		title.Position = UDim2.new(0, 78, 0, 8)
+		title.BackgroundTransparency = 1
+		title.TextColor3 = Color3.fromRGB(255, 255, 255)
+		title.Font = Enum.Font.GothamBlack
+		title.TextSize = 13
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.TextTruncate = Enum.TextTruncate.AtEnd
+		title.Text = cardData.title
+		title.Parent = card
+
+		-- SubLabel
+		local subLabel = Instance.new("TextLabel")
+		subLabel.Name = "SubLabel"
+		subLabel.Size = UDim2.new(1, -195, 0, 16)
+		subLabel.Position = UDim2.new(0, 78, 0, 26)
+		subLabel.BackgroundTransparency = 1
+		subLabel.TextColor3 = cardData.rarityColor
+		subLabel.Font = Enum.Font.GothamBold
+		subLabel.TextSize = 10
+		subLabel.TextXAlignment = Enum.TextXAlignment.Left
+		subLabel.Text = cardData.subtitle or ""
+		subLabel.Parent = card
+
+		-- Description
+		local desc = Instance.new("TextLabel")
+		desc.Name = "Desc"
+		desc.Size = UDim2.new(1, -195, 0, 52)
+		desc.Position = UDim2.new(0, 78, 0, 44)
+		desc.BackgroundTransparency = 1
+		desc.TextColor3 = Color3.fromRGB(190, 215, 255)
+		desc.Font = Enum.Font.Gotham
+		desc.TextSize = 10
+		desc.TextWrapped = true
+		desc.TextXAlignment = Enum.TextXAlignment.Left
+		desc.TextYAlignment = Enum.TextYAlignment.Top
+		desc.Text = cardData.description or ""
+		desc.Parent = card
+
+		-- Select Button (Right side)
+		local selectBtn = Instance.new("TextButton")
+		selectBtn.Name = "SelectBtn"
+		selectBtn.Size = UDim2.new(0, 95, 0, 38)
+		selectBtn.Position = UDim2.new(1, -105, 0.5, -19)
+		selectBtn.BackgroundColor3 = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
+		selectBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
+		selectBtn.Font = Enum.Font.GothamBlack
+		selectBtn.TextSize = 12
+		selectBtn.Text = "CHOISIR"
+		selectBtn.Parent = card
+
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 6)
+		btnCorner.Parent = selectBtn
+
+		local function pickThis()
+			if not countdownActive then return end
+			countdownActive = false
+			levelUpModal.Visible = false
+			Remotes.GetEvent("SelectLevelUpChoice"):FireServer(index)
+		end
+		selectBtn.Activated:Connect(pickThis)
+
 	else
-		iconBadge.Visible = true
+		-- Desktop / Landscape Card (Vertical card style)
+		card.Size = UDim2.new(0, 280, 0, 400)
+
+		local categoryBadge = Instance.new("TextLabel")
+		categoryBadge.Name = "CategoryBadge"
+		categoryBadge.Size = UDim2.new(0, 130, 0, 28)
+		categoryBadge.Position = UDim2.new(0.5, -65, 0, -14)
+		categoryBadge.BackgroundColor3 = Color3.fromRGB(10, 20, 30)
+		categoryBadge.TextColor3 = cardData.rarityColor or Color3.fromRGB(255, 255, 255)
+		categoryBadge.Font = Enum.Font.GothamBlack
+		categoryBadge.TextSize = 11
+		categoryBadge.Text = cardData.category or "UPGRADE"
+		categoryBadge.Parent = card
+
+		local catCorner = Instance.new("UICorner")
+		catCorner.CornerRadius = UDim.new(0, 8)
+		catCorner.Parent = categoryBadge
+
+		local catStroke = Instance.new("UIStroke")
+		catStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
+		catStroke.Thickness = 1.5
+		catStroke.Parent = categoryBadge
+
+		local title = Instance.new("TextLabel")
+		title.Name = "Title"
+		title.Size = UDim2.new(1, -24, 0, 48)
+		title.Position = UDim2.new(0, 12, 0, 28)
+		title.BackgroundTransparency = 1
+		title.TextColor3 = Color3.fromRGB(255, 255, 255)
+		title.Font = Enum.Font.GothamBlack
+		title.TextSize = 16
+		title.TextWrapped = true
+		title.Text = cardData.title
+		title.Parent = card
+
+		local iconBox = Instance.new("Frame")
+		iconBox.Name = "IconBox"
+		iconBox.Size = UDim2.new(0, 80, 0, 80)
+		iconBox.Position = UDim2.new(0.5, -40, 0, 86)
+		iconBox.BackgroundColor3 = Color3.fromRGB(10, 20, 40)
+		iconBox.BorderSizePixel = 0
+		iconBox.Parent = card
+
+		local iCorner = Instance.new("UICorner")
+		iCorner.CornerRadius = UDim.new(0, 14)
+		iCorner.Parent = iconBox
+
+		local iStroke = Instance.new("UIStroke")
+		iStroke.Color = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
+		iStroke.Thickness = 2
+		iStroke.Transparency = 0.3
+		iStroke.Parent = iconBox
+
+		local iconBadge = Instance.new("TextLabel")
+		iconBadge.Name = "IconBadge"
+		iconBadge.Size = UDim2.new(1, -8, 1, -8)
+		iconBadge.Position = UDim2.new(0, 4, 0, 4)
+		iconBadge.BackgroundTransparency = 1
+		iconBadge.Text = cardData.tag or string.sub(cardData.title, 1, 12):upper()
+		iconBadge.TextColor3 = cardData.rarityColor
+		iconBadge.Font = Enum.Font.GothamBlack
+		iconBadge.TextSize = 11
+		iconBadge.TextWrapped = true
+		iconBadge.ZIndex = 1
+		iconBadge.Parent = iconBox
+
+		local resolvedImage = resolveTexture(cardData.iconFile, cardData.icon)
+		if resolvedImage and resolvedImage ~= "" then
+			local iconImg = Instance.new("ImageLabel")
+			iconImg.Size = UDim2.new(1, -10, 1, -10)
+			iconImg.Position = UDim2.new(0, 5, 0, 5)
+			iconImg.BackgroundTransparency = 1
+			iconImg.Image = resolvedImage
+			iconImg.ZIndex = 2
+			iconImg.Parent = iconBox
+			iconBadge.Visible = false
+		end
+
+		local subLabel = Instance.new("TextLabel")
+		subLabel.Name = "SubLabel"
+		subLabel.Size = UDim2.new(1, -20, 0, 24)
+		subLabel.Position = UDim2.new(0, 10, 0, 178)
+		subLabel.BackgroundTransparency = 1
+		subLabel.TextColor3 = cardData.rarityColor
+		subLabel.Font = Enum.Font.GothamBold
+		subLabel.TextSize = 12
+		subLabel.Text = cardData.subtitle or ""
+		subLabel.Parent = card
+
+		local desc = Instance.new("TextLabel")
+		desc.Name = "Desc"
+		desc.Size = UDim2.new(1, -24, 0, 110)
+		desc.Position = UDim2.new(0, 12, 0, 206)
+		desc.BackgroundTransparency = 1
+		desc.TextColor3 = Color3.fromRGB(200, 220, 255)
+		desc.Font = Enum.Font.Gotham
+		desc.TextSize = 13
+		desc.TextWrapped = true
+		desc.Text = cardData.description or ""
+		desc.Parent = card
+
+		local selectBtn = Instance.new("TextButton")
+		selectBtn.Name = "SelectBtn"
+		selectBtn.Size = UDim2.new(1, -30, 0, 42)
+		selectBtn.Position = UDim2.new(0, 15, 1, -54)
+		selectBtn.BackgroundColor3 = cardData.rarityColor or Color3.fromRGB(0, 200, 255)
+		selectBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
+		selectBtn.Font = Enum.Font.GothamBlack
+		selectBtn.TextSize = 14
+		selectBtn.Text = "SÉLECTIONNER"
+		selectBtn.Parent = card
+
+		local btnCorner = Instance.new("UICorner")
+		btnCorner.CornerRadius = UDim.new(0, 8)
+		btnCorner.Parent = selectBtn
+
+		local function pickThis()
+			if not countdownActive then return end
+			countdownActive = false
+			levelUpModal.Visible = false
+			Remotes.GetEvent("SelectLevelUpChoice"):FireServer(index)
+		end
+		selectBtn.Activated:Connect(pickThis)
 	end
-
-	-- Subtitle (e.g. RANG 1 ➔ 2)
-	local subLabel = Instance.new("TextLabel")
-	subLabel.Name = "SubLabel"
-	subLabel.Size = UDim2.new(1, -20, 0, 24)
-	subLabel.Position = UDim2.new(0, 10, 0, 178)
-	subLabel.BackgroundTransparency = 1
-	subLabel.TextColor3 = cardData.rarityColor
-	subLabel.Font = Enum.Font.GothamBold
-	subLabel.TextSize = 12
-	subLabel.Text = cardData.subtitle or ""
-	subLabel.Parent = card
-
-	-- Description
-	local desc = Instance.new("TextLabel")
-	desc.Name = "Desc"
-	desc.Size = UDim2.new(1, -24, 0, 110)
-	desc.Position = UDim2.new(0, 12, 0, 206)
-	desc.BackgroundTransparency = 1
-	desc.TextColor3 = Color3.fromRGB(200, 220, 255)
-	desc.Font = Enum.Font.Gotham
-	desc.TextSize = 13
-	desc.TextWrapped = true
-	desc.Text = cardData.description or ""
-	desc.Parent = card
-
-	-- Full Card Button / Select Button
-	local selectBtn = Instance.new("TextButton")
-	selectBtn.Name = "SelectBtn"
-	selectBtn.Size = UDim2.new(1, -30, 0, 42)
-	selectBtn.Position = UDim2.new(0, 15, 1, -54)
-	selectBtn.BackgroundColor3 = cardData.rarityColor
-	selectBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
-	selectBtn.Font = Enum.Font.GothamBlack
-	selectBtn.TextSize = 14
-	selectBtn.Text = "SÉLECTIONNER"
-	selectBtn.Parent = card
-
-	local btnCorner = Instance.new("UICorner")
-	btnCorner.CornerRadius = UDim.new(0, 8)
-	btnCorner.Parent = selectBtn
-
-	local function pickThis()
-		if not countdownActive then return end
-		countdownActive = false
-		levelUpModal.Visible = false
-		Remotes.GetEvent("SelectLevelUpChoice"):FireServer(index)
-	end
-
-	selectBtn.Activated:Connect(pickThis)
 
 	return card
 end

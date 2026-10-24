@@ -29,6 +29,9 @@ export type ActiveEnemy = {
 	burnTimer: number,
 	targetPlayer: Player?,
 
+	-- Exact kinematic position tracker (guarantees zero drift/jitter)
+	currentPos: Vector3,
+
 	-- AI Dash State Machine (TheSwarm EnemyAI)
 	dashState: DashState,
 	dashTimer: number,
@@ -168,7 +171,7 @@ local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: b
 	return billboard
 end
 
-local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart)
+local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart, Vector3)
 	local model = Instance.new("Model")
 	model.Name = config.name
 
@@ -410,10 +413,10 @@ local function buildProceduralEnemy(config: EnemiesData.EnemyConfig, spawnPos: V
 	createHealthUI(root, config.size.Y * 0.7, config.isBoss)
 	model.Parent = getEnemiesFolder()
 
-	return model, root
+	return model, root, centeredSpawn
 end
 
-local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart)
+local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vector3): (Model, BasePart, Vector3)
 	local customTemplate = findCustomTemplate(config.id)
 
 	if customTemplate then
@@ -428,31 +431,7 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 			end
 		end
 
-		local root = model.PrimaryPart
-		if not root then
-			root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
-		end
-		if not root then
-			root = model:FindFirstChildWhichIsA("BasePart")
-		end
-
-		if root then
-			model.PrimaryPart = root
-		else
-			local cf, sz = model:GetBoundingBox()
-			root = Instance.new("Part")
-			root.Name = "HumanoidRootPart"
-			root.Size = sz
-			root.CFrame = cf
-			root.Transparency = 1
-			root.CanCollide = false
-			root.Anchored = true
-			root.Parent = model
-			model.PrimaryPart = root
-		end
-
 		-- CRITICAL: Auto-scale the imported FBX down to match config.size!
-		-- Unity FBX meshes are often 10x-20x too big in Roblox without scaling
 		local rawExtents = model:GetExtentsSize()
 		local maxRaw = math.max(rawExtents.X, rawExtents.Y, rawExtents.Z)
 		local targetMax = math.max(config.size.X, config.size.Y, config.size.Z)
@@ -463,16 +442,38 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 			print(string.format("[EnemyService] Scaled '%s' model by %.4f (from %.1f to %.1f studs)", config.id, scaleRatio, maxRaw, targetMax))
 		end
 
-		local scaledExtents = model:GetExtentsSize()
+		local bbCFrame, bbSize = model:GetBoundingBox()
+
+		-- Clean, centered HumanoidRootPart directly at the model's true geometric center
+		local existingHrp = model:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local root: BasePart
+		if existingHrp then
+			root = existingHrp
+			root.Size = config.size
+		else
+			root = Instance.new("Part")
+			root.Name = "HumanoidRootPart"
+			root.Size = config.size
+			root.CFrame = bbCFrame
+			root.Transparency = 1
+			root.CanCollide = false
+			root.Anchored = true
+			root.Parent = model
+		end
+
+		model.PrimaryPart = root
+		model.WorldPivot = root.CFrame
+		root.PivotOffset = CFrame.identity
+
 		local isFlying = (config.id == "ScoutDrone" or config.id == "MetaDrone")
-		local fixedY = if isFlying then (3.0 + scaledExtents.Y * 0.5) else (scaledExtents.Y * 0.5 + 0.05)
+		local fixedY = if isFlying then (3.0 + config.size.Y * 0.5) else (config.size.Y * 0.5 + 0.05)
 		local centeredSpawn = Vector3.new(spawnPos.X, fixedY, spawnPos.Z)
 
 		model:PivotTo(CFrame.new(centeredSpawn))
-		createHealthUI(root, scaledExtents.Y * 0.7, config.isBoss)
+		createHealthUI(root, config.size.Y * 0.7, config.isBoss)
 		model.Parent = getEnemiesFolder()
 
-		return model, root
+		return model, root, centeredSpawn
 	end
 
 	return buildProceduralEnemy(config, spawnPos)
@@ -482,7 +483,7 @@ function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3): Acti
 	local config = EnemiesData.GetEnemy(configId)
 	if not config then return nil end
 
-	local model, rootPart = createEnemyModel(config, spawnPosition)
+	local model, rootPart, centeredSpawn = createEnemyModel(config, spawnPosition)
 
 	local enemy: ActiveEnemy = {
 		model = model,
@@ -496,6 +497,8 @@ function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3): Acti
 		burnStacks = 0,
 		burnTimer = 0,
 		targetPlayer = nil,
+
+		currentPos = centeredSpawn,
 
 		dashState = "NONE",
 		dashTimer = 0,
@@ -523,7 +526,7 @@ function EnemyService.GetClosestEnemy(fromPos: Vector3, maxRange: number): Activ
 
 	for _, enemy in pairs(activeEnemies) do
 		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
-			local ePos = enemy.rootPart.Position
+			local ePos = enemy.currentPos or enemy.rootPart.Position
 			local dx = ePos.X - fromPos.X
 			local dz = ePos.Z - fromPos.Z
 			local distSq = dx * dx + dz * dz
@@ -543,7 +546,7 @@ function EnemyService.GetEnemiesInRange(fromPos: Vector3, radius: number): { Act
 
 	for _, enemy in pairs(activeEnemies) do
 		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
-			local ePos = enemy.rootPart.Position
+			local ePos = enemy.currentPos or enemy.rootPart.Position
 			local dx = ePos.X - fromPos.X
 			local dz = ePos.Z - fromPos.Z
 			if (dx * dx + dz * dz) <= rSq then
@@ -752,7 +755,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		end
 
 		local root = enemy.rootPart
-		local ePos = root.Position
+		local ePos = enemy.currentPos
 		local cfg = enemy.config
 
 		-- Burn DoT tick every 0.5s
@@ -797,10 +800,10 @@ RunService.Heartbeat:Connect(function(dt: number)
 
 		-- --- 1. DASH STATE MACHINE (TheSwarm PREP -> CHARGING -> NONE) ---
 		if enemy.dashState == "PREP" then
-			-- Immobile charging phase with red ground telegraph
+			-- Immobile charging phase: ABSOLUTELY ZERO MOVEMENT
 			moveDir = Vector3.zero
 			if enemy.dashTimer > cfg.dashLockTime then
-				enemy.dashDirection = flatDir -- Track player until lock window
+				enemy.dashDirection = flatDir -- Continuously track player until lock window
 			end
 			updateOrCreateDashTelegraph(enemy, ePos, enemy.dashDirection, cfg.dashDistance, 2.2)
 
@@ -815,14 +818,13 @@ RunService.Heartbeat:Connect(function(dt: number)
 			end
 
 		elseif enemy.dashState == "CHARGING" then
-			-- Surging forward at high velocity
+			-- Surging forward at high velocity along locked direction
 			local step = cfg.dashSpeed * dt
 			if enemy.dashDistanceTraveled + step > cfg.dashDistance then
 				step = cfg.dashDistance - enemy.dashDistanceTraveled
 			end
 			enemy.dashDistanceTraveled += step
-			moveDir = enemy.dashDirection
-			moveSpeed = cfg.dashSpeed
+			enemy.currentPos += enemy.dashDirection * step
 
 			-- Contact during dash deals boosted damage (1.5x)
 			if flatDist <= (cfg.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.3) then
@@ -914,13 +916,18 @@ RunService.Heartbeat:Connect(function(dt: number)
 				-- Standard chase
 				moveDir = flatDir
 			end
+
+			-- Apply standard movement when not charging
+			if moveDir.Magnitude > 0.05 then
+				enemy.currentPos += (moveDir.Unit * (moveSpeed * dt))
+			end
 		end
 
-		-- Kinematic position & rotation update
+		-- Enforce fixed Y plane (guarantees model never bobs into or above ground)
 		local fixedY = getEnemyFixedY(cfg.id, cfg.size.Y)
-		local newPos = ePos + (moveDir * (moveSpeed * dt))
-		newPos = Vector3.new(newPos.X, fixedY, newPos.Z)
+		enemy.currentPos = Vector3.new(enemy.currentPos.X, fixedY, enemy.currentPos.Z)
 
+		-- Facing direction strictly aligns with attack telegraph or motion
 		local facingDir: Vector3? = nil
 		if enemy.dashState == "CHARGING" or enemy.dashState == "PREP" then
 			facingDir = enemy.dashDirection
@@ -933,9 +940,9 @@ RunService.Heartbeat:Connect(function(dt: number)
 		end
 
 		if facingDir and facingDir.Magnitude > 0.05 then
-			enemy.model:PivotTo(CFrame.lookAt(newPos, newPos + facingDir))
+			enemy.model:PivotTo(CFrame.lookAt(enemy.currentPos, enemy.currentPos + facingDir))
 		else
-			enemy.model:PivotTo(CFrame.new(newPos) * root.CFrame.Rotation)
+			enemy.model:PivotTo(CFrame.new(enemy.currentPos))
 		end
 
 		-- Contact Damage to player (tested on 2D XZ plane)
