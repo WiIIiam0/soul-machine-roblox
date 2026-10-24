@@ -593,6 +593,32 @@ function EnemyService.KillEnemy(enemy: ActiveEnemy, killer: Player?)
 	-- Signal event
 	GameEvents.OnEnemyKilled:Fire(enemy.config, killer)
 
+	-- Burn Transfer: If dying enemy was burning, propagate stacks to nearest alive foe
+	if enemy.burnStacks > 0 and deathPos ~= Vector3.zero then
+		local closestEnemy: ActiveEnemy? = nil
+		local closestDist = 30.0 -- 30 studs search radius (matching TheSwarm BurnTransfer 25f)
+		for _, other in pairs(activeEnemies) do
+			if other ~= enemy and not other.isDead and other.rootPart then
+				local dist = (other.rootPart.Position - deathPos).Magnitude
+				if dist < closestDist then
+					closestDist = dist
+					closestEnemy = other
+				end
+			end
+		end
+
+		if closestEnemy and closestEnemy.rootPart then
+			closestEnemy.burnStacks += enemy.burnStacks
+			Remotes.GetEvent("VFXEvent"):FireAllClients("BurnTransfer", deathPos, closestEnemy.rootPart.Position)
+			Remotes.GetEvent("FloatingText"):FireAllClients(
+				closestEnemy.rootPart.Position + Vector3.new(0, 3, 0),
+				string.format("+%d BRÛLURE", enemy.burnStacks),
+				Color3.fromRGB(255, 120, 20),
+				false
+			)
+		end
+	end
+
 	-- Spawn XP Gem
 	local XPService = require(script.Parent.XPService)
 	XPService.SpawnGem(deathPos, enemy.config.xpValue, enemy.config.isMetaEnemy)

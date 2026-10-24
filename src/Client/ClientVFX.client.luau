@@ -66,6 +66,32 @@ local function createDeathBurst(pos: Vector3, color: Color3, isBoss: boolean)
 	createExplosion(pos, blastRadius, color)
 end
 
+local function createBurnTransferBeam(startPos: Vector3, endPos: Vector3)
+	local dist = (endPos - startPos).Magnitude
+	if dist <= 0.1 then return end
+
+	local beamPart = Instance.new("Part")
+	beamPart.Name = "BurnTransferBeam"
+	beamPart.Size = Vector3.new(0.5, 0.5, dist)
+	beamPart.CFrame = CFrame.lookAt((startPos + endPos) * 0.5, endPos)
+	beamPart.Color = Color3.fromRGB(255, 120, 20)
+	beamPart.Material = Enum.Material.Neon
+	beamPart.Transparency = 0.1
+	beamPart.Anchored = true
+	beamPart.CanCollide = false
+	beamPart.CastShadow = false
+	beamPart.Parent = Workspace
+
+	local tw = TweenService:Create(beamPart, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Transparency = 1,
+		Size = Vector3.new(0.05, 0.05, dist),
+	})
+	tw:Play()
+	tw.Completed:Connect(function()
+		beamPart:Destroy()
+	end)
+end
+
 local function applyOverdriveAura(targetPlayer: Player, enable: boolean)
 	local char = targetPlayer.Character
 	if not char then return end
@@ -122,6 +148,11 @@ vfxEvent.OnClientEvent:Connect(function(eventType: string, ...: any)
 	elseif eventType == "EnemyDeath" then
 		local pos, color, isBoss = ...
 		createDeathBurst(pos, color or Color3.fromRGB(255, 50, 50), isBoss or false)
+	elseif eventType == "BurnTransfer" then
+		local startPos, endPos = ...
+		if startPos and endPos then
+			createBurnTransferBeam(startPos, endPos)
+		end
 	elseif eventType == "OverdriveStart" then
 		local targetPlayer = ...
 		applyOverdriveAura(targetPlayer, true)
