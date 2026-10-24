@@ -36,21 +36,23 @@ if not musicGroup then
 	musicGroup.Parent = soundGroupFolder
 end
 
--- Sound asset cache & fallback verified Roblox IDs
-local SOUND_PRESETS = {
-	LaserShoot = "rbxassetid://9114223171",
-	HeavyShoot = "rbxassetid://9114223297",
-	Explosion = "rbxassetid://9114223531",
-	PlayerHit = "rbxassetid://9114223400",
-	BurnTransfer = "rbxassetid://9114223780",
-	LevelUp = "rbxassetid://9069609269",
-	GlobalLevelUp = "rbxassetid://9068095400",
-	OverdriveStart = "rbxassetid://9114223650",
-	OverdriveEnd = "rbxassetid://9114223700",
-	PassiveProc = "rbxassetid://9114223850",
-	CardSelect = "rbxassetid://9114223900",
-	MusicTrack = "rbxassetid://1837849285",
+-- Sound asset cache with verified classic Roblox SFX
+local SOUND_PRESETS: { [string]: string } = {
+	LaserShoot = "rbxassetid://130113322",   -- Official classic Roblox laser fire
+	HeavyShoot = "rbxassetid://130113322",
+	Explosion = "rbxassetid://12222084",     -- Official classic Roblox explosion
+	PlayerHit = "rbxassetid://12222216",     -- Official classic hit sound
+	BurnTransfer = "rbxassetid://130113322",
+	LevelUp = "rbxassetid://130788893",      -- Official chime
+	GlobalLevelUp = "rbxassetid://130788893",
+	OverdriveStart = "rbxassetid://130788893",
+	OverdriveEnd = "rbxassetid://12222084",
+	PassiveProc = "rbxassetid://12221967",
+	CardSelect = "rbxassetid://12221967",
+	MusicTrack = "",                         -- Left empty until uploaded to prevent format error
 }
+
+local blacklistedSoundIds: { [string]: boolean } = {}
 
 local function findCustomSound(soundName: string): string?
 	local customFolder = ReplicatedStorage:FindFirstChild("Audio") or ReplicatedStorage:FindFirstChild("Sounds")
@@ -67,7 +69,7 @@ local lastShotSoundTime = 0
 
 local function playSFX(presetKey: string, customName: string?, volumeMultiplier: number?, pitch: number?)
 	local soundId = (customName and findCustomSound(customName)) or SOUND_PRESETS[presetKey]
-	if not soundId or soundId == "" then return end
+	if not soundId or soundId == "" or blacklistedSoundIds[soundId] then return end
 
 	local sound = Instance.new("Sound")
 	sound.Name = "SFX_" .. presetKey
@@ -77,7 +79,16 @@ local function playSFX(presetKey: string, customName: string?, volumeMultiplier:
 	sound.SoundGroup = sfxGroup
 	sound.Parent = SoundService
 
-	sound:Play()
+	local ok = pcall(function()
+		sound:Play()
+	end)
+
+	if not ok then
+		blacklistedSoundIds[soundId] = true
+		sound:Destroy()
+		return
+	end
+
 	sound.Ended:Connect(function()
 		sound:Destroy()
 	end)
@@ -143,17 +154,20 @@ Remotes.GetEvent("SelectLevelUpChoice").OnClientEvent:Connect(function()
 end)
 
 -- --- 4. CYBERPUNK BACKGROUND COMBAT MUSIC (JUKEBOX) ---
-local bgMusic = Instance.new("Sound")
-bgMusic.Name = "CyberpunkCombatMusic"
-bgMusic.SoundId = findCustomSound("game_track_1") or SOUND_PRESETS.MusicTrack
-bgMusic.Looped = true
-bgMusic.Volume = 0.30
-bgMusic.SoundGroup = musicGroup
-bgMusic.Parent = SoundService
+local customMusic = findCustomSound("game_track_1") or findCustomSound("menu_new")
+if customMusic and customMusic ~= "" then
+	local bgMusic = Instance.new("Sound")
+	bgMusic.Name = "CyberpunkCombatMusic"
+	bgMusic.SoundId = customMusic
+	bgMusic.Looped = true
+	bgMusic.Volume = 0.30
+	bgMusic.SoundGroup = musicGroup
+	bgMusic.Parent = SoundService
 
-task.spawn(function()
-	task.wait(1.5)
-	pcall(function()
-		bgMusic:Play()
+	task.spawn(function()
+		task.wait(1.5)
+		pcall(function()
+			bgMusic:Play()
+		end)
 	end)
-end)
+end

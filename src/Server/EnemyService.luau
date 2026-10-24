@@ -14,6 +14,8 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
 
+export type DashState = "NONE" | "PREP" | "CHARGING"
+
 export type ActiveEnemy = {
 	model: Model,
 	rootPart: BasePart,
@@ -26,6 +28,20 @@ export type ActiveEnemy = {
 	burnStacks: number,
 	burnTimer: number,
 	targetPlayer: Player?,
+
+	-- AI Dash State Machine (TheSwarm EnemyAI)
+	dashState: DashState,
+	dashTimer: number,
+	dashCooldownTimer: number,
+	dashDirection: Vector3,
+	dashDistanceTraveled: number,
+
+	-- AI Shoot Charge State Machine
+	shootCharging: boolean,
+	shootChargeTimer: number,
+
+	-- Visual Telegraph (Laser beam / ground strip)
+	telegraphPart: BasePart?,
 }
 
 local EnemyService = {}
@@ -480,6 +496,17 @@ function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3): Acti
 		burnStacks = 0,
 		burnTimer = 0,
 		targetPlayer = nil,
+
+		dashState = "NONE",
+		dashTimer = 0,
+		dashCooldownTimer = math.random() * 1.5,
+		dashDirection = Vector3.zero,
+		dashDistanceTraveled = 0,
+
+		shootCharging = false,
+		shootChargeTimer = 0,
+
+		telegraphPart = nil,
 	}
 
 	activeEnemies[model] = enemy
@@ -583,6 +610,11 @@ function EnemyService.KillEnemy(enemy: ActiveEnemy, killer: Player?)
 	if enemy.isDead then return end
 	enemy.isDead = true
 
+	if enemy.telegraphPart then
+		enemy.telegraphPart:Destroy()
+		enemy.telegraphPart = nil
+	end
+
 	activeEnemies[enemy.model] = nil
 
 	local deathPos = if enemy.rootPart then enemy.rootPart.Position else Vector3.zero
@@ -659,18 +691,69 @@ local function getNearestPlayer(pos: Vector3): (Player?, Vector3?, number)
 	return nearest, nearestPos, minDistance
 end
 
--- Heartbeat AI loop (Kinematic simulation with Anchored parts)
+local function updateOrCreateDashTelegraph(enemy: ActiveEnemy, startPos: Vector3, dir: Vector3, distance: number, width: number)
+	local targetPos = startPos + dir * distance
+	local midPos = startPos + dir * (distance * 0.5)
+
+	if enemy.telegraphPart and enemy.telegraphPart.Parent then
+		enemy.telegraphPart.Size = Vector3.new(width, 0.05, distance)
+		enemy.telegraphPart.CFrame = CFrame.lookAt(Vector3.new(midPos.X, 0.1, midPos.Z), Vector3.new(targetPos.X, 0.1, targetPos.Z))
+	else
+		local p = Instance.new("Part")
+		p.Name = "DashTelegraph"
+		p.Size = Vector3.new(width, 0.05, distance)
+		p.CFrame = CFrame.lookAt(Vector3.new(midPos.X, 0.1, midPos.Z), Vector3.new(targetPos.X, 0.1, targetPos.Z))
+		p.Color = Color3.fromRGB(255, 30, 40)
+		p.Material = Enum.Material.Neon
+		p.Transparency = 0.50
+		p.Anchored = true
+		p.CanCollide = false
+		p.CastShadow = false
+		p.Parent = Workspace
+		enemy.telegraphPart = p
+	end
+end
+
+local function updateOrCreateLaserTelegraph(enemy: ActiveEnemy, startPos: Vector3, targetPos: Vector3)
+	local dist = (targetPos - startPos).Magnitude
+	local midPos = (startPos + targetPos) * 0.5
+
+	if enemy.telegraphPart and enemy.telegraphPart.Parent then
+		enemy.telegraphPart.Size = Vector3.new(0.12, 0.12, dist)
+		enemy.telegraphPart.CFrame = CFrame.lookAt(midPos, targetPos)
+	else
+		local p = Instance.new("Part")
+		p.Name = "LaserTelegraph"
+		p.Size = Vector3.new(0.12, 0.12, dist)
+		p.CFrame = CFrame.lookAt(midPos, targetPos)
+		p.Color = Color3.fromRGB(255, 30, 40)
+		p.Material = Enum.Material.Neon
+		p.Transparency = 0.35
+		p.Anchored = true
+		p.CanCollide = false
+		p.CastShadow = false
+		p.Parent = Workspace
+		enemy.telegraphPart = p
+	end
+end
+
+-- Heartbeat AI loop (Modular state machine matching TheSwarm EnemyAI.cs)
 RunService.Heartbeat:Connect(function(dt: number)
 	local now = os.clock()
 
 	for model, enemy in pairs(activeEnemies) do
 		if enemy.isDead or not enemy.rootPart or not enemy.rootPart.Parent then
+			if enemy.telegraphPart then
+				enemy.telegraphPart:Destroy()
+				enemy.telegraphPart = nil
+			end
 			activeEnemies[model] = nil
 			continue
 		end
 
 		local root = enemy.rootPart
 		local ePos = root.Position
+		local cfg = enemy.config
 
 		-- Burn DoT tick every 0.5s
 		if enemy.burnStacks > 0 then
@@ -680,7 +763,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 				local burnDmg = math.max(1, enemy.burnStacks * 1.5)
 				enemy.currentHealth = math.max(0, enemy.currentHealth - burnDmg)
 
-				local fPos = ePos + Vector3.new(0, enemy.config.size.Y * 0.5 + 1.2, 0)
+				local fPos = ePos + Vector3.new(0, cfg.size.Y * 0.5 + 1.2, 0)
 				Remotes.GetEvent("FloatingText"):FireAllClients(fPos, string.format("%.0f", burnDmg), Color3.fromRGB(255, 100, 20), false)
 
 				if enemy.currentHealth <= 0 then
@@ -695,11 +778,15 @@ RunService.Heartbeat:Connect(function(dt: number)
 		enemy.targetPlayer = targetPlayer
 
 		if not targetPos or not targetPlayer then
+			if enemy.telegraphPart then
+				enemy.telegraphPart:Destroy()
+				enemy.telegraphPart = nil
+			end
 			continue
 		end
 
-		local behavior = enemy.config.behavior
 		local moveDir = Vector3.zero
+		local moveSpeed = cfg.moveSpeed
 		local flatDir = Vector3.zero
 
 		local toTarget = (targetPos - ePos)
@@ -708,73 +795,153 @@ RunService.Heartbeat:Connect(function(dt: number)
 			flatDir = Vector3.new(toTarget.X, 0, toTarget.Z).Unit
 		end
 
-		if behavior == "CHASE" then
-			moveDir = flatDir
+		-- --- 1. DASH STATE MACHINE (TheSwarm PREP -> CHARGING -> NONE) ---
+		if enemy.dashState == "PREP" then
+			-- Immobile charging phase with red ground telegraph
+			moveDir = Vector3.zero
+			if enemy.dashTimer > cfg.dashLockTime then
+				enemy.dashDirection = flatDir -- Track player until lock window
+			end
+			updateOrCreateDashTelegraph(enemy, ePos, enemy.dashDirection, cfg.dashDistance, 2.2)
 
-		elseif behavior == "BOSS" then
-			moveDir = flatDir
+			enemy.dashTimer -= dt
+			if enemy.dashTimer <= 0 then
+				if enemy.telegraphPart then
+					enemy.telegraphPart:Destroy()
+					enemy.telegraphPart = nil
+				end
+				enemy.dashState = "CHARGING"
+				enemy.dashDistanceTraveled = 0
+			end
 
-			-- Boss triple plasma spread attack
-			if now - enemy.lastShootTime >= enemy.config.shootCooldown and flatDist <= enemy.config.shootRange then
-				enemy.lastShootTime = now
-				local ProjectileService = require(script.Parent.ProjectileService)
-				local baseAngle = math.atan2(flatDir.Z, flatDir.X)
-				for _, angleOffset in ipairs({ -0.22, 0, 0.22 }) do
-					local angle = baseAngle + angleOffset
-					local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
-					ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 2.5, 0), dir, enemy.config.bulletDamage, enemy.config.bulletSpeed)
+		elseif enemy.dashState == "CHARGING" then
+			-- Surging forward at high velocity
+			local step = cfg.dashSpeed * dt
+			if enemy.dashDistanceTraveled + step > cfg.dashDistance then
+				step = cfg.dashDistance - enemy.dashDistanceTraveled
+			end
+			enemy.dashDistanceTraveled += step
+			moveDir = enemy.dashDirection
+			moveSpeed = cfg.dashSpeed
+
+			-- Contact during dash deals boosted damage (1.5x)
+			if flatDist <= (cfg.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.3) then
+				enemy.lastContactTime = now
+				PlayerStatsManager.TakeDamage(targetPlayer, cfg.contactDamage * 1.5, enemy)
+
+				if cfg.behavior == "KAMIKAZE" then
+					Remotes.GetEvent("VFXEvent"):FireAllClients("Explosion", ePos, 14, Color3.fromRGB(255, 60, 20))
+					EnemyService.KillEnemy(enemy, nil)
+					continue
 				end
 			end
 
-		elseif behavior == "KITE_SHOOT" then
-			if flatDist < 30 then
+			if enemy.dashDistanceTraveled >= cfg.dashDistance then
+				enemy.dashState = "NONE"
+				enemy.dashCooldownTimer = cfg.dashCooldown
+				if cfg.behavior == "KAMIKAZE" then
+					Remotes.GetEvent("VFXEvent"):FireAllClients("Explosion", ePos, 14, Color3.fromRGB(255, 60, 20))
+					EnemyService.KillEnemy(enemy, nil)
+					continue
+				end
+			end
+
+		else
+			-- Dash state is NONE: Zone AI & trigger checks
+			enemy.dashCooldownTimer -= dt
+
+			-- Check if enemy should trigger a Dash
+			if cfg.canDash and flatDist <= cfg.dashRange and enemy.dashCooldownTimer <= 0 then
+				enemy.dashState = "PREP"
+				enemy.dashTimer = cfg.dashPrepTime
+				enemy.dashDirection = flatDir
+				enemy.dashDistanceTraveled = 0
+				updateOrCreateDashTelegraph(enemy, ePos, enemy.dashDirection, cfg.dashDistance, 2.2)
+
+			elseif cfg.canShoot and flatDist <= cfg.shootRange then
+				-- SHOOTING BEHAVIOR (SniperBot or OverlordBoss)
+				if cfg.fleeRange > 0 and flatDist < cfg.fleeRange then
+					-- Too close: retreat to maintain optimal firing distance
+					moveDir = -flatDir
+					moveSpeed = cfg.fleeSpeed
+					if enemy.telegraphPart then
+						enemy.telegraphPart:Destroy()
+						enemy.telegraphPart = nil
+					end
+					enemy.shootCharging = false
+					enemy.shootChargeTimer = 0
+				else
+					-- Stand in place and charge sniper laser
+					moveDir = Vector3.zero
+					if now - enemy.lastShootTime >= cfg.shootCooldown then
+						if not enemy.shootCharging then
+							enemy.shootCharging = true
+							enemy.shootChargeTimer = 0
+						end
+
+						enemy.shootChargeTimer += dt
+						updateOrCreateLaserTelegraph(enemy, ePos + Vector3.new(0, 1.5, 0), targetPos + Vector3.new(0, 1.5, 0))
+
+						if enemy.shootChargeTimer >= cfg.shootChargeTime then
+							if enemy.telegraphPart then
+								enemy.telegraphPart:Destroy()
+								enemy.telegraphPart = nil
+							end
+							enemy.shootCharging = false
+							enemy.shootChargeTimer = 0
+							enemy.lastShootTime = now
+
+							-- Spawn projectile
+							local ProjectileService = require(script.Parent.ProjectileService)
+							if cfg.behavior == "BOSS" then
+								local baseAngle = math.atan2(flatDir.Z, flatDir.X)
+								for _, angleOffset in ipairs({ -0.22, 0, 0.22 }) do
+									local angle = baseAngle + angleOffset
+									local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
+									ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 2.5, 0), dir, cfg.bulletDamage, cfg.bulletSpeed)
+								end
+							else
+								ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 1.5, 0), flatDir, cfg.bulletDamage, cfg.bulletSpeed)
+							end
+						end
+					end
+				end
+
+			elseif cfg.behavior == "FLEE_LOOT" then
 				moveDir = -flatDir
-			elseif flatDist > 55 then
-				moveDir = flatDir
+
 			else
-				moveDir = Vector3.new(-flatDir.Z, 0, flatDir.X)
+				-- Standard chase
+				moveDir = flatDir
 			end
-
-			-- Shoot enemy projectile
-			if now - enemy.lastShootTime >= enemy.config.shootCooldown then
-				enemy.lastShootTime = now
-				local ProjectileService = require(script.Parent.ProjectileService)
-				ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 1.5, 0), flatDir, enemy.config.bulletDamage, enemy.config.bulletSpeed)
-			end
-
-		elseif behavior == "KAMIKAZE" then
-			moveDir = flatDir
-
-			-- Detonate on close contact
-			if dist <= 5.5 then
-				Remotes.GetEvent("VFXEvent"):FireAllClients("Explosion", ePos, 12, Color3.fromRGB(255, 60, 20))
-				PlayerStatsManager.TakeDamage(targetPlayer, enemy.config.contactDamage, enemy)
-				EnemyService.KillEnemy(enemy, nil)
-				continue
-			end
-
-		elseif behavior == "FLEE_LOOT" then
-			moveDir = -flatDir
 		end
 
 		-- Kinematic position & rotation update
-		local fixedY = getEnemyFixedY(enemy.config.id, enemy.config.size.Y)
-		local newPos = ePos + (moveDir * (enemy.config.moveSpeed * dt))
+		local fixedY = getEnemyFixedY(cfg.id, cfg.size.Y)
+		local newPos = ePos + (moveDir * (moveSpeed * dt))
 		newPos = Vector3.new(newPos.X, fixedY, newPos.Z)
 
-		if behavior == "KITE_SHOOT" and flatDir.Magnitude > 0.05 then
-			-- Always face the player while shooting
-			enemy.model:PivotTo(CFrame.lookAt(newPos, newPos + flatDir))
+		local facingDir: Vector3? = nil
+		if enemy.dashState == "CHARGING" or enemy.dashState == "PREP" then
+			facingDir = enemy.dashDirection
+		elseif enemy.shootCharging then
+			facingDir = flatDir
 		elseif moveDir.Magnitude > 0.05 then
-			enemy.model:PivotTo(CFrame.lookAt(newPos, newPos + moveDir))
+			facingDir = moveDir
+		elseif flatDir.Magnitude > 0.05 then
+			facingDir = flatDir
+		end
+
+		if facingDir and facingDir.Magnitude > 0.05 then
+			enemy.model:PivotTo(CFrame.lookAt(newPos, newPos + facingDir))
 		else
 			enemy.model:PivotTo(CFrame.new(newPos) * root.CFrame.Rotation)
 		end
 
 		-- Contact Damage to player (tested on 2D XZ plane)
-		if flatDist <= (enemy.config.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.5) then
+		if flatDist <= (cfg.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.5) then
 			enemy.lastContactTime = now
-			PlayerStatsManager.TakeDamage(targetPlayer, enemy.config.contactDamage, enemy)
+			PlayerStatsManager.TakeDamage(targetPlayer, cfg.contactDamage, enemy)
 		end
 	end
 end)
