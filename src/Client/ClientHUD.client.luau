@@ -170,28 +170,92 @@ local _, weaponSlots = createInvRow("Weapons", "ARMES", Color3.fromRGB(255, 100,
 local _, passiveSlots = createInvRow("Passives", "PASSIFS", Color3.fromRGB(200, 150, 255), 44)
 local _, statSlots = createInvRow("Stats", "STATS", Color3.fromRGB(100, 255, 150), 80)
 
+local textureCache: { [string]: string } = {}
+
+local function extractTextureString(inst: Instance): string?
+	if inst:IsA("Decal") or inst:IsA("Texture") then
+		if inst.Texture and inst.Texture ~= "" then return inst.Texture end
+	elseif inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
+		if inst.Image and inst.Image ~= "" then return inst.Image end
+	elseif inst:IsA("StringValue") then
+		if inst.Value and inst.Value ~= "" then return inst.Value end
+	elseif inst:IsA("MeshPart") then
+		if inst.TextureID and inst.TextureID ~= "" then return inst.TextureID end
+	end
+	return nil
+end
+
 local function resolveTexture(iconFile: string?, rawIcon: string?): string?
+	if not iconFile or iconFile == "" then
+		if rawIcon and rawIcon ~= "" and not string.find(rawIcon, "rbxassetid://10709791") then
+			return rawIcon
+		end
+		return nil
+	end
+
+	local cleanName = string.gsub(iconFile, "%.png$", "")
+	local cleanLower = string.lower(cleanName)
+
+	if textureCache[cleanLower] then
+		return textureCache[cleanLower]
+	end
+
+	-- 1. Direct fast lookup in common containers
 	local candidates = {
 		ReplicatedStorage:FindFirstChild("Icons"),
 		ReplicatedStorage:FindFirstChild("Assets"),
 		ReplicatedStorage:FindFirstChild("Images"),
+		ReplicatedStorage:FindFirstChild("CustomCreeps"),
 		ReplicatedStorage,
+		Workspace:FindFirstChild("Icons"),
+		Workspace:FindFirstChild("Assets"),
 	}
 
-	if iconFile and iconFile ~= "" then
-		local cleanName = string.gsub(iconFile, "%.png$", "")
-		for _, folder in ipairs(candidates) do
-			if folder then
-				local found = folder:FindFirstChild(iconFile) or folder:FindFirstChild(cleanName)
-				if found then
-					if found:IsA("Decal") or found:IsA("Texture") then
-						return found.Texture
-					elseif found:IsA("ImageLabel") or found:IsA("ImageButton") then
-						return found.Image
-					elseif found:IsA("StringValue") then
-						return found.Value
-					end
+	for _, folder in ipairs(candidates) do
+		if folder then
+			local found = folder:FindFirstChild(iconFile) or folder:FindFirstChild(cleanName)
+			if found then
+				local tex = extractTextureString(found)
+				if tex then
+					textureCache[cleanLower] = tex
+					return tex
 				end
+			end
+		end
+	end
+
+	-- 2. Scan ReplicatedStorage descendants
+	for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
+		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) then
+			local tex = extractTextureString(desc)
+			if tex then
+				textureCache[cleanLower] = tex
+				return tex
+			end
+		end
+	end
+
+	-- 3. Scan Workspace descendants
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
+		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) then
+			local tex = extractTextureString(desc)
+			if tex then
+				textureCache[cleanLower] = tex
+				return tex
+			end
+		end
+	end
+
+	-- 4. Check playerGui descendants
+	for _, desc in ipairs(playerGui:GetDescendants()) do
+		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
+		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) then
+			local tex = extractTextureString(desc)
+			if tex then
+				textureCache[cleanLower] = tex
+				return tex
 			end
 		end
 	end
@@ -749,7 +813,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.stats then
-		local sList: { { name: string, rank: number, tag: string?, icon: string? } } = {}
+		local sList: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
 		local statEntries = { "MaxHP", "Speed", "DamageMultiplier", "Armor", "LifeSteal", "RangeMultiplier" }
 		for _, sKey in ipairs(statEntries) do
 			if data.stats[sKey] then
@@ -760,6 +824,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 					rank = math.floor(data.stats[sKey]),
 					tag = tag,
 					icon = if conf then conf.icon else nil,
+					iconFile = if conf then conf.iconFile else nil,
 				})
 			end
 		end
