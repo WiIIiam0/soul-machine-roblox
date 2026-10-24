@@ -16,12 +16,23 @@ local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
 
 export type DashState = "NONE" | "PREP" | "CHARGING"
 
+export type SpawnOverrides = {
+	hpMult: number?,
+	damageMult: number?,
+	xpMult: number?,
+	playerScale: number?,
+}
+
 export type ActiveEnemy = {
 	model: Model,
 	rootPart: BasePart,
 	config: EnemiesData.EnemyConfig,
 	currentHealth: number,
 	maxHealth: number,
+	contactDamage: number,
+	bulletDamage: number,
+	xpValue: number,
+	metaClusterCount: number,
 	isDead: boolean,
 	lastContactTime: number,
 	lastShootTime: number,
@@ -479,18 +490,33 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 	return buildProceduralEnemy(config, spawnPos)
 end
 
-function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3): ActiveEnemy?
+function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3, overrides: SpawnOverrides?): ActiveEnemy?
 	local config = EnemiesData.GetEnemy(configId)
 	if not config then return nil end
 
 	local model, rootPart, centeredSpawn = createEnemyModel(config, spawnPosition)
 
+	local hpMult = if overrides and overrides.hpMult then overrides.hpMult else 1.0
+	local dmgMult = if overrides and overrides.damageMult then overrides.damageMult else 1.0
+	local xpMult = if overrides and overrides.xpMult then overrides.xpMult else 1.0
+	local playerScale = if overrides and overrides.playerScale then math.max(1, overrides.playerScale) else 1
+
+	local scaledMaxHP = math.max(1, math.floor(config.maxHealth * hpMult * (if config.isBoss then playerScale else 1)))
+	local scaledContactDmg = config.contactDamage * dmgMult
+	local scaledBulletDmg = config.bulletDamage * dmgMult
+	local scaledXP = if config.isMetaEnemy then config.xpValue else (config.xpValue * xpMult * (if config.isBoss then playerScale else 1))
+	local scaledMetaClusters = 6 * playerScale
+
 	local enemy: ActiveEnemy = {
 		model = model,
 		rootPart = rootPart,
 		config = config,
-		currentHealth = config.maxHealth,
-		maxHealth = config.maxHealth,
+		currentHealth = scaledMaxHP,
+		maxHealth = scaledMaxHP,
+		contactDamage = scaledContactDmg,
+		bulletDamage = scaledBulletDmg,
+		xpValue = scaledXP,
+		metaClusterCount = scaledMetaClusters,
 		isDead = false,
 		lastContactTime = 0,
 		lastShootTime = 0,
@@ -514,6 +540,20 @@ function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3): Acti
 
 	activeEnemies[model] = enemy
 	return enemy
+end
+
+function EnemyService.ClearAllEnemies()
+	for model, enemy in pairs(activeEnemies) do
+		enemy.isDead = true
+		if enemy.telegraphPart then
+			enemy.telegraphPart:Destroy()
+			enemy.telegraphPart = nil
+		end
+		if model and model.Parent then
+			model:Destroy()
+		end
+		activeEnemies[model] = nil
+	end
 end
 
 function EnemyService.GetActiveEnemies(): { [Model]: ActiveEnemy }
@@ -725,13 +765,13 @@ function EnemyService.KillEnemy(enemy: ActiveEnemy, killer: Player?)
 		end
 	end
 
-	-- Spawn XP Gem
+	-- Spawn XP Gem (using zone-scaled xpValue)
 	local XPService = require(script.Parent.XPService)
-	XPService.SpawnGem(deathPos, enemy.config.xpValue, enemy.config.isMetaEnemy)
+	XPService.SpawnGem(deathPos, enemy.xpValue, enemy.config.isMetaEnemy)
 
 	if enemy.config.isBoss then
-		-- Boss drops extra cluster of gems!
-		for i = 1, 6 do
+		-- Boss drops extra cluster of gems scaled by playerScale!
+		for i = 1, (enemy.metaClusterCount or 6) do
 			local offset = Vector3.new(math.random(-8, 8), 0, math.random(-8, 8))
 			XPService.SpawnGem(deathPos + offset, 10, true)
 		end
@@ -900,7 +940,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 			-- Contact during dash deals boosted damage (1.5x)
 			if flatDist <= (cfg.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.3) then
 				enemy.lastContactTime = now
-				PlayerStatsManager.TakeDamage(targetPlayer, cfg.contactDamage * 1.5, enemy)
+				PlayerStatsManager.TakeDamage(targetPlayer, enemy.contactDamage * 1.5, enemy)
 
 				if cfg.behavior == "KAMIKAZE" then
 					Remotes.GetEvent("VFXEvent"):FireAllClients("Explosion", ePos, 14, Color3.fromRGB(255, 60, 20))
@@ -971,10 +1011,10 @@ RunService.Heartbeat:Connect(function(dt: number)
 								for _, angleOffset in ipairs({ -0.22, 0, 0.22 }) do
 									local angle = baseAngle + angleOffset
 									local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
-									ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 2.5, 0), dir, cfg.bulletDamage, cfg.bulletSpeed)
+									ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 2.5, 0), dir, enemy.bulletDamage, cfg.bulletSpeed)
 								end
 							else
-								ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 1.5, 0), flatDir, cfg.bulletDamage, cfg.bulletSpeed)
+								ProjectileService.SpawnEnemyBullet(ePos + Vector3.new(0, 1.5, 0), flatDir, enemy.bulletDamage, cfg.bulletSpeed)
 							end
 						end
 					end
@@ -1019,7 +1059,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		-- Contact Damage to player (tested on 2D XZ plane)
 		if flatDist <= (cfg.size.X * 0.5 + 2.5) and (now - enemy.lastContactTime >= 0.5) then
 			enemy.lastContactTime = now
-			PlayerStatsManager.TakeDamage(targetPlayer, cfg.contactDamage, enemy)
+			PlayerStatsManager.TakeDamage(targetPlayer, enemy.contactDamage, enemy)
 		end
 	end
 end)

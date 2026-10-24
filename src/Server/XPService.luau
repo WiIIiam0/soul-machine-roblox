@@ -58,6 +58,47 @@ function XPService.InitPlayer(player: Player)
 	XPService.SyncXP(player)
 end
 
+function XPService.GetPlayerLevel(player: Player): number
+	local state = playerXPMap[player]
+	if state then
+		return state.level
+	end
+	return 1
+end
+
+function XPService.ExportState(player: Player): PlayerXPState?
+	local state = playerXPMap[player]
+	if not state then return nil end
+	return {
+		level = state.level,
+		currentXP = state.currentXP,
+		xpToNextLevel = state.xpToNextLevel,
+		totalMetaXP = state.totalMetaXP,
+	}
+end
+
+function XPService.ImportState(player: Player, saved: any)
+	if type(saved) ~= "table" then return end
+	local state: PlayerXPState = {
+		level = math.max(1, math.floor(tonumber(saved.level) or 1)),
+		currentXP = math.max(0, tonumber(saved.currentXP) or 0),
+		xpToNextLevel = math.max(12, math.floor(tonumber(saved.xpToNextLevel) or 12)),
+		totalMetaXP = math.max(0, tonumber(saved.totalMetaXP) or 0),
+	}
+	playerXPMap[player] = state
+	XPService.SyncXP(player)
+end
+
+function XPService.ClearAllGems()
+	for i = #activeGems, 1, -1 do
+		local gem = activeGems[i]
+		if gem.part and gem.part.Parent then
+			gem.part:Destroy()
+		end
+		table.remove(activeGems, i)
+	end
+end
+
 function XPService.SpawnGem(pos: Vector3, value: number, isMeta: boolean)
 	local part = Instance.new("Part")
 	part.Name = if isMeta then "MetaGem" else "XPGem"
@@ -81,6 +122,47 @@ function XPService.SpawnGem(pos: Vector3, value: number, isMeta: boolean)
 	}
 
 	table.insert(activeGems, gem)
+end
+
+local function getAliveRecipients(): { Player }
+	local list: { Player } = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		local pData = PlayerStatsManager.GetPlayerData(p)
+		if pData and not pData.isDead and playerXPMap[p] ~= nil then
+			table.insert(list, p)
+		end
+	end
+	return list
+end
+
+-- Partage d'XP équitable : si 1 d'XP est ramassé et qu'il y a 4 joueurs vivants, chacun reçoit 1/4 = 0.25 XP
+function XPService.DistributeSharedXP(totalAmount: number, isMeta: boolean, collector: Player?)
+	local recipients = getAliveRecipients()
+	if #recipients == 0 then
+		if collector and playerXPMap[collector] then
+			XPService.AddXP(collector, totalAmount, isMeta)
+		end
+		return
+	end
+
+	local count = #recipients
+	if isMeta then
+		local metaShare = 1.0 / count
+		local displayShare = totalAmount / count
+		for _, p in ipairs(recipients) do
+			local state = playerXPMap[p]
+			if state then
+				state.totalMetaXP += displayShare
+				GameEvents.OnXPCollected:Fire(p, metaShare, true)
+				XPService.SyncXP(p)
+			end
+		end
+	else
+		local xpShare = totalAmount / count
+		for _, p in ipairs(recipients) do
+			XPService.AddXP(p, xpShare, false)
+		end
+	end
 end
 
 function XPService.AddXP(player: Player, amount: number, isMeta: boolean)
@@ -168,8 +250,8 @@ RunService.Heartbeat:Connect(function(dt: number)
 				local dist = toPlayer.Magnitude
 
 				if dist <= 2.2 then
-					-- Picked up!
-					XPService.AddXP(gem.magnetizedTo, gem.value, gem.isMeta)
+					-- Picked up! Distribute shared XP across all alive players in the zone
+					XPService.DistributeSharedXP(gem.value, gem.isMeta, gem.magnetizedTo)
 					gem.part:Destroy()
 					table.remove(activeGems, i)
 					continue

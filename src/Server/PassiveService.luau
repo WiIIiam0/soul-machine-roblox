@@ -37,12 +37,83 @@ function PassiveService.InitPlayer(player: Player)
 			OnLevelUp = 0,
 			OnOverdrive = 0,
 			OnGainXP = 0,
+			OnWaveStart = 0,
+			OnWeaponFire = 0,
 		},
 		currentThresholds = {},
 	}
 	playerPassiveStates[player] = state
 	playerLastPositions[player] = nil
 	playerStandTimers[player] = 0
+end
+
+function PassiveService.ExportState(player: Player): any?
+	local state = playerPassiveStates[player]
+	if not state then return nil end
+
+	local pairsList: { { trigger: string, effect: string } } = {}
+	for _, p in ipairs(state.passives) do
+		table.insert(pairsList, {
+			trigger = p.trigger,
+			effect = p.effect,
+		})
+	end
+
+	local accCopy: { [string]: number } = {}
+	for k, v in pairs(state.accumulators) do
+		accCopy[k] = v
+	end
+
+	local threshCopy: { [string]: number } = {}
+	for k, v in pairs(state.currentThresholds) do
+		threshCopy[k] = v
+	end
+
+	return {
+		pairs = pairsList,
+		accumulators = accCopy,
+		currentThresholds = threshCopy,
+	}
+end
+
+function PassiveService.ImportState(player: Player, saved: any)
+	if type(saved) ~= "table" then return end
+	PassiveService.InitPlayer(player)
+	local state = playerPassiveStates[player]
+	if not state then return end
+
+	if type(saved.pairs) == "table" then
+		for _, entry in ipairs(saved.pairs) do
+			if type(entry) == "table" and type(entry.trigger) == "string" and type(entry.effect) == "string" then
+				local pDef = PassivesData.CreateDynamicPassive(
+					entry.trigger :: PassivesData.TriggerCondition,
+					entry.effect :: PassivesData.PassiveEffect
+				)
+				table.insert(state.passives, pDef)
+				state.currentThresholds[pDef.id] = pDef.threshold
+			end
+		end
+	end
+
+	if type(saved.accumulators) == "table" then
+		for k, v in pairs(saved.accumulators) do
+			if type(k) == "string" and type(v) == "number" then
+				(state.accumulators :: any)[k] = v
+			end
+		end
+	end
+
+	if type(saved.currentThresholds) == "table" then
+		for k, v in pairs(saved.currentThresholds) do
+			if type(k) == "string" and type(v) == "number" then
+				state.currentThresholds[k] = v
+			end
+		end
+	end
+
+	Remotes.GetEvent("StateSync"):FireClient(player, {
+		passives = state.passives,
+	})
 end
 
 function PassiveService.AddPassive(player: Player, passive: PassivesData.PassiveDefinition)
@@ -170,7 +241,7 @@ GameEvents.OnWeaponFired:Connect(function(player: Player, _weaponId: string)
 	feedTrigger(player, "OnWeaponFire", 1)
 end)
 
-GameEvents.OnWaveStarted:Connect(function(_waveNumber: number)
+GameEvents.OnWaveStart:Connect(function(_waveNumber: number)
 	for _, p in ipairs(Players:GetPlayers()) do
 		feedTrigger(p, "OnWaveStart", 1)
 	end

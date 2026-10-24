@@ -9,9 +9,15 @@
 --   ObserverSensor (mecha optical sensors)
 
 local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local ZonesData = require(Shared:WaitForChild("ZonesData"))
+
 local ArenaBuilder = {}
+ArenaBuilder.PORTAL_POSITION = Vector3.new(0, 0, -56)
+ArenaBuilder.PORTAL_RADIUS = 4.8
 
 local TEXTURES = {
 	NetheritePlating = "rbxthumb://type=Asset&id=18180391155&w=420&h=420",
@@ -121,7 +127,165 @@ local function createLegoBlock(
 	return brick
 end
 
-function ArenaBuilder.BuildArena()
+local function buildZoneTeleporter(arena: Model, zone: ZonesData.ZoneConfig)
+	if not zone.nextZoneId or not zone.nextZoneRequiredLevel then
+		return
+	end
+
+	local nextZone = ZonesData.GetZone(zone.nextZoneId)
+	local portalCenter = ArenaBuilder.PORTAL_POSITION
+	local portalModel = Instance.new("Model")
+	portalModel.Name = "ZonePortalModel"
+
+	-- Socle blindé extérieur
+	local outerBase = Instance.new("Part")
+	outerBase.Name = "PortalOuterBase"
+	outerBase.Shape = Enum.PartType.Cylinder
+	outerBase.Size = Vector3.new(0.6, 12.5, 12.5)
+	outerBase.CFrame = CFrame.new(portalCenter.X, 0.3, portalCenter.Z) * CFrame.Angles(0, 0, math.rad(90))
+	outerBase.Color = Color3.fromRGB(245, 210, 20)
+	outerBase.Material = Enum.Material.SmoothPlastic
+	outerBase.Anchored = true
+	outerBase.CanCollide = false
+	outerBase.Parent = portalModel
+	addAllFacesTexture(outerBase, TEXTURES.HazardStripes, 4, 4)
+
+	-- Disque d'énergie central (changé dynamiquement côté client en vert/cyan quand le joueur a le niveau requis)
+	local portalCore = Instance.new("Part")
+	portalCore.Name = "ZonePortalCore"
+	portalCore.Shape = Enum.PartType.Cylinder
+	portalCore.Size = Vector3.new(0.85, 9.2, 9.2)
+	portalCore.CFrame = CFrame.new(portalCenter.X, 0.45, portalCenter.Z) * CFrame.Angles(0, 0, math.rad(90))
+	portalCore.Color = Color3.fromRGB(255, 80, 40)
+	portalCore.Material = Enum.Material.Neon
+	portalCore.Anchored = true
+	portalCore.CanCollide = false
+	portalCore.Parent = portalModel
+
+	local coreLight = Instance.new("PointLight")
+	coreLight.Name = "PortalCoreLight"
+	coreLight.Color = nextZone.themeColor
+	coreLight.Brightness = 3.2
+	coreLight.Range = 28
+	coreLight.Parent = portalCore
+
+	-- Colonne énergétique holographique verticale
+	local beam = Instance.new("Part")
+	beam.Name = "ZonePortalBeam"
+	beam.Shape = Enum.PartType.Cylinder
+	beam.Size = Vector3.new(11.0, 8.6, 8.6)
+	beam.CFrame = CFrame.new(portalCenter.X, 6.0, portalCenter.Z) * CFrame.Angles(0, 0, math.rad(90))
+	beam.Color = Color3.fromRGB(255, 80, 40)
+	beam.Material = Enum.Material.Neon
+	beam.Transparency = 0.78
+	beam.Anchored = true
+	beam.CanCollide = false
+	beam.CastShadow = false
+	beam.Parent = portalModel
+
+	-- Deux pylônes latéraux blindés + arche supérieure
+	for _, xOffset in ipairs({ -6.8, 6.8 }) do
+		local pylon = Instance.new("Part")
+		pylon.Name = if xOffset < 0 then "PortalPylonLeft" else "PortalPylonRight"
+		pylon.Size = Vector3.new(2.4, 13.0, 2.4)
+		pylon.Position = Vector3.new(portalCenter.X + xOffset, 6.5, portalCenter.Z)
+		pylon.Color = Color3.fromRGB(165, 175, 190)
+		pylon.Material = Enum.Material.SmoothPlastic
+		pylon.Anchored = true
+		pylon.CanCollide = true
+		pylon.Parent = portalModel
+		addAllFacesTexture(pylon, TEXTURES.IronArmor, 3, 3)
+
+		local strip = Instance.new("Part")
+		strip.Name = "PylonEnergyStrip"
+		strip.Size = Vector3.new(0.8, 11.5, 2.6)
+		strip.Position = pylon.Position
+		strip.Color = nextZone.themeColor
+		strip.Material = Enum.Material.Neon
+		strip.Anchored = true
+		strip.CanCollide = false
+		strip.Parent = portalModel
+	end
+
+	local arch = Instance.new("Part")
+	arch.Name = "PortalArch"
+	arch.Size = Vector3.new(16.4, 2.2, 2.8)
+	arch.Position = Vector3.new(portalCenter.X, 13.5, portalCenter.Z)
+	arch.Color = Color3.fromRGB(150, 160, 175)
+	arch.Material = Enum.Material.SmoothPlastic
+	arch.Anchored = true
+	arch.CanCollide = false
+	arch.Parent = portalModel
+	addAllFacesTexture(arch, TEXTURES.IronArmor, 4, 2)
+
+	-- Ancre BillboardGui flottante visible dans toute l'arène
+	local labelAnchor = Instance.new("Part")
+	labelAnchor.Name = "PortalLabelAnchor"
+	labelAnchor.Size = Vector3.new(1, 1, 1)
+	labelAnchor.Position = Vector3.new(portalCenter.X, 16.5, portalCenter.Z)
+	labelAnchor.Transparency = 1
+	labelAnchor.Anchored = true
+	labelAnchor.CanCollide = false
+	labelAnchor.Parent = portalModel
+
+	local bb = Instance.new("BillboardGui")
+	bb.Name = "PortalBillboard"
+	bb.Size = UDim2.new(0, 320, 0, 68)
+	bb.AlwaysOnTop = true
+	bb.MaxDistance = 240
+	bb.Parent = labelAnchor
+
+	local bg = Instance.new("Frame")
+	bg.Name = "BG"
+	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
+	bg.BackgroundTransparency = 0.15
+	bg.BorderSizePixel = 0
+	bg.Parent = bb
+
+	local bgCorner = Instance.new("UICorner")
+	bgCorner.CornerRadius = UDim.new(0, 8)
+	bgCorner.Parent = bg
+
+	local bgStroke = Instance.new("UIStroke")
+	bgStroke.Name = "PortalStroke"
+	bgStroke.Color = nextZone.themeColor
+	bgStroke.Thickness = 2
+	bgStroke.Parent = bg
+
+	local titleLbl = Instance.new("TextLabel")
+	titleLbl.Name = "TitleLabel"
+	titleLbl.Size = UDim2.new(1, -12, 0, 28)
+	titleLbl.Position = UDim2.new(0, 6, 0, 6)
+	titleLbl.BackgroundTransparency = 1
+	titleLbl.Font = Enum.Font.GothamBlack
+	titleLbl.TextSize = 14
+	titleLbl.TextColor3 = nextZone.themeColor
+	titleLbl.Text = string.format("TÉLÉPORTEUR ➔ %s", nextZone.name)
+	titleLbl.Parent = bg
+
+	local reqLbl = Instance.new("TextLabel")
+	reqLbl.Name = "ReqLabel"
+	reqLbl.Size = UDim2.new(1, -12, 0, 26)
+	reqLbl.Position = UDim2.new(0, 6, 0, 34)
+	reqLbl.BackgroundTransparency = 1
+	reqLbl.Font = Enum.Font.GothamBold
+	reqLbl.TextSize = 13
+	reqLbl.TextColor3 = Color3.fromRGB(255, 95, 75)
+	reqLbl.Text = string.format("VERROUILLÉ — NIVEAU %d REQUIS", zone.nextZoneRequiredLevel)
+	reqLbl.Parent = bg
+
+	portalModel.Parent = arena
+end
+
+function ArenaBuilder.BuildArena(zoneOverride: ZonesData.ZoneConfig?)
+	local zone = zoneOverride or ZonesData.GetZone(1)
+
+	Workspace:SetAttribute("ZoneId", zone.zoneId)
+	Workspace:SetAttribute("ZoneName", zone.name)
+	Workspace:SetAttribute("NextZoneId", zone.nextZoneId or 0)
+	Workspace:SetAttribute("NextZoneRequiredLevel", zone.nextZoneRequiredLevel or 0)
+
 	local existing = Workspace:FindFirstChild("MechaArena")
 	if existing then
 		existing:Destroy()
@@ -168,8 +332,8 @@ function ArenaBuilder.BuildArena()
 				bMat = Enum.Material.SmoothPlastic
 				bTex = TEXTURES.HazardStripes
 			elseif isReactor then
-				-- Réacteur à plasma central lumineux (ReactorCore)
-				bColor = Color3.fromRGB(255, 60, 40)
+				-- Réacteur à plasma central lumineux teinté par la Zone
+				bColor = zone.themeColor
 				bMat = Enum.Material.Neon
 				bTex = TEXTURES.ReactorCore
 			elseif isCrosswalk then
@@ -178,8 +342,8 @@ function ArenaBuilder.BuildArena()
 				bMat = Enum.Material.SmoothPlastic
 				bTex = TEXTURES.IronArmor
 			else
-				-- Dalles de combat standard en composite sombre (NetheritePlating)
-				bColor = Color3.fromRGB(50, 48, 55)
+				-- Dalles de combat standard teintées selon la Zone
+				bColor = zone.floorTint
 				bMat = Enum.Material.SmoothPlastic
 				bTex = TEXTURES.NetheritePlating
 			end
@@ -191,7 +355,7 @@ function ArenaBuilder.BuildArena()
 	-- 3. Lumière dynamique du réacteur central
 	local reactorCoreLight = Instance.new("PointLight")
 	reactorCoreLight.Name = "ReactorLight"
-	reactorCoreLight.Color = Color3.fromRGB(255, 60, 40)
+	reactorCoreLight.Color = zone.themeColor
 	reactorCoreLight.Brightness = 2.8
 	reactorCoreLight.Range = 38
 	reactorCoreLight.Shadows = true
@@ -218,7 +382,7 @@ function ArenaBuilder.BuildArena()
 		wall.Name = cfg.name
 		wall.Size = cfg.size
 		wall.Position = cfg.pos
-		wall.Color = Color3.fromRGB(0, 190, 255)
+		wall.Color = zone.themeColor
 		wall.Material = Enum.Material.Neon
 		wall.Transparency = 0.72
 		wall.Anchored = true
@@ -277,14 +441,14 @@ function ArenaBuilder.BuildArena()
 		towerLight.Name = "TowerCore"
 		towerLight.Size = Vector3.new(4, 22, 4)
 		towerLight.Position = tower.Position
-		towerLight.Color = Color3.fromRGB(0, 240, 255)
+		towerLight.Color = zone.themeColor
 		towerLight.Material = Enum.Material.Neon
 		towerLight.Anchored = true
 		towerLight.CanCollide = false
 		towerLight.Parent = arena
 
 		local pLight = Instance.new("PointLight")
-		pLight.Color = Color3.fromRGB(0, 220, 255)
+		pLight.Color = zone.themeColor
 		pLight.Brightness = 2.5
 		pLight.Range = 35
 		pLight.Parent = towerLight
@@ -300,6 +464,9 @@ function ArenaBuilder.BuildArena()
 		cap.Parent = arena
 		addAllFacesTexture(cap, TEXTURES.ObserverSensor, 3, 3)
 	end
+
+	-- 6B. Téléporteur inter-serveurs vers la Zone suivante (verrouillé par niveau)
+	buildZoneTeleporter(arena, zone)
 
 	-- 7. Spawn Central
 	local spawn = Instance.new("SpawnLocation")

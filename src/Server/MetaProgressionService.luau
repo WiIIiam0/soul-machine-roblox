@@ -15,6 +15,7 @@ local DATA_STORE_NAME = "SoulMachine_Meta_v3"
 
 export type PlayerMetaState = {
 	totalXP: number,
+	fractionalXP: number,
 	startingXP: number,
 	weaponSlots: number,
 	passiveSlots: number,
@@ -54,6 +55,7 @@ end
 function MetaProgressionService.InitPlayer(player: Player)
 	local defaultState: PlayerMetaState = {
 		totalXP = 0,
+		fractionalXP = 0,
 		startingXP = 0,
 		weaponSlots = 1,
 		passiveSlots = 1,
@@ -73,7 +75,7 @@ function MetaProgressionService.InitPlayer(player: Player)
 		end)
 
 		if loadSuccess and data and type(data) == "table" then
-			local xp = math.max(0, tonumber(data.totalXP) or tonumber(data.xp) or 0)
+			local xp = math.max(0, math.floor(tonumber(data.totalXP) or tonumber(data.xp) or 0))
 			defaultState.totalXP = xp
 			defaultState.startingXP = xp
 			defaultState.totalRuns = (tonumber(data.totalRuns) or 0) + 1
@@ -96,6 +98,7 @@ function MetaProgressionService.GetPlayerMeta(player: Player): PlayerMetaState
 	end
 	local fallback: PlayerMetaState = {
 		totalXP = 0,
+		fractionalXP = 0,
 		startingXP = 0,
 		weaponSlots = 1,
 		passiveSlots = 1,
@@ -112,11 +115,18 @@ end
 
 function MetaProgressionService.AddGlobalXP(player: Player, amount: number, source: string)
 	local state = playerMetaMap[player]
-	if not state then return end
+	if not state or amount <= 0 then return end
+
+	state.fractionalXP = (state.fractionalXP or 0) + amount
+	local wholeGain = math.floor(state.fractionalXP + 1e-6)
+	if wholeGain <= 0 then
+		return
+	end
+	state.fractionalXP = math.max(0, state.fractionalXP - wholeGain)
 
 	local oldXP = state.totalXP
-	state.totalXP += amount
-	state.sessionXP += amount
+	state.totalXP += wholeGain
+	state.sessionXP += wholeGain
 
 	local oldWeaponSlots = state.weaponSlots
 	local oldPassiveSlots = state.passiveSlots
@@ -193,10 +203,12 @@ end
 
 Players.PlayerRemoving:Connect(MetaProgressionService.Cleanup)
 
--- Listen to Game Events to award Global XP automatically
-GameEvents.OnWaveCompleted:Connect(function(waveNum: number)
+-- Listen to Game Events to award Global XP automatically (sans montée par numéro de vague)
+GameEvents.OnWaveCompleted:Connect(function(_waveNum: number)
+	local zoneId = tonumber(game:GetService("Workspace"):GetAttribute("ZoneId")) or 1
+	local zoneReward = 10 * zoneId
 	for _, player in ipairs(Players:GetPlayers()) do
-		MetaProgressionService.AddGlobalXP(player, 10 + (waveNum * 2), "WaveCompleted")
+		MetaProgressionService.AddGlobalXP(player, zoneReward, "WaveCompleted")
 	end
 end)
 
@@ -207,11 +219,12 @@ GameEvents.OnEnemyKilled:Connect(function(enemyData: any, killerPlayer: Player?)
 			state.totalKills += 1
 		end
 
+		local cfg = if enemyData and enemyData.config then enemyData.config else enemyData
 		local amount = 1
-		if enemyData and enemyData.config then
-			if enemyData.config.isBoss then
+		if cfg then
+			if cfg.isBoss then
 				amount = 25
-			elseif enemyData.config.isMetaEnemy then
+			elseif cfg.isMetaEnemy then
 				amount = 5
 			end
 		end
@@ -221,8 +234,7 @@ end)
 
 GameEvents.OnXPCollected:Connect(function(player: Player, amount: number, isMeta: boolean)
 	if isMeta then
-		-- Meta Gem collected gives 1 ADN XP directly (matches MetaXPGem.cs metaXpValue = 1)
-		MetaProgressionService.AddGlobalXP(player, 1, "MetaGem")
+		MetaProgressionService.AddGlobalXP(player, if type(amount) == "number" and amount > 0 then amount else 1, "MetaGem")
 	end
 end)
 

@@ -63,10 +63,10 @@ local function triggerDamageFlash()
 	tw:Play()
 end
 
--- --- 2. TOP-CENTER: XP & WAVE TRACKER (In-Run) ---
+-- --- 2. TOP-CENTER: XP, ZONE & WAVE TRACKER (In-Run) ---
 local topBarContainer = Instance.new("Frame")
 topBarContainer.Name = "TopBarContainer"
-topBarContainer.Size = UDim2.new(0, 480, 0, 44)
+topBarContainer.Size = UDim2.new(0, 560, 0, 44)
 topBarContainer.AnchorPoint = Vector2.new(0.5, 0)
 topBarContainer.Position = UDim2.new(0.5, 0, 0, 16)
 topBarContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
@@ -98,7 +98,7 @@ levelBadge.Parent = topBarContainer
 -- XP Bar (In-run)
 local xpBarBg = Instance.new("Frame")
 xpBarBg.Name = "XPBarBg"
-xpBarBg.Size = UDim2.new(1, -250, 0, 14)
+xpBarBg.Size = UDim2.new(1, -315, 0, 14)
 xpBarBg.Position = UDim2.new(0, 80, 0.5, -7)
 xpBarBg.BackgroundColor3 = Color3.fromRGB(8, 12, 18)
 xpBarBg.BorderSizePixel = 0
@@ -129,16 +129,16 @@ xpText.TextSize = 10
 xpText.Text = "0 / 12 XP"
 xpText.Parent = xpBarBg
 
--- Wave & Enemies Tracker
+-- Zone, Wave & Enemies Tracker
 local waveInfoLabel = Instance.new("TextLabel")
 waveInfoLabel.Name = "WaveInfoLabel"
-waveInfoLabel.Size = UDim2.new(0, 165, 1, 0)
-waveInfoLabel.Position = UDim2.new(1, -170, 0, 0)
+waveInfoLabel.Size = UDim2.new(0, 225, 1, 0)
+waveInfoLabel.Position = UDim2.new(1, -230, 0, 0)
 waveInfoLabel.BackgroundTransparency = 1
 waveInfoLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
 waveInfoLabel.Font = Enum.Font.GothamBlack
 waveInfoLabel.TextSize = 11
-waveInfoLabel.Text = "VAGUE 1 (40s) | 0 FOES"
+waveInfoLabel.Text = "ZONE 1 • VAGUE 1 (35s) | 0 FOES"
 waveInfoLabel.Parent = topBarContainer
 
 -- --- 2B. TOP-CENTER: META-PROGRESSION TRACKER (Compte Global) ---
@@ -1435,6 +1435,110 @@ restartBtn.Activated:Connect(function()
 	Remotes.GetEvent("RestartRun"):FireServer()
 end)
 
+-- --- 8B. ZONE WARP OVERLAY & LOCAL PORTAL VISUAL SYNC ---
+local warpOverlay = Instance.new("Frame")
+warpOverlay.Name = "ZoneWarpOverlay"
+warpOverlay.Size = UDim2.new(1, 0, 1, 0)
+warpOverlay.BackgroundColor3 = Color3.fromRGB(6, 12, 24)
+warpOverlay.BackgroundTransparency = 0.15
+warpOverlay.BorderSizePixel = 0
+warpOverlay.Visible = false
+warpOverlay.ZIndex = 220
+warpOverlay.Parent = vfxGui
+
+local warpLabel = Instance.new("TextLabel")
+warpLabel.Name = "WarpLabel"
+warpLabel.Size = UDim2.new(1, -40, 0, 60)
+warpLabel.Position = UDim2.new(0, 20, 0.5, -30)
+warpLabel.BackgroundTransparency = 1
+warpLabel.Font = Enum.Font.GothamBlack
+warpLabel.TextSize = 24
+warpLabel.TextColor3 = Color3.fromRGB(0, 240, 255)
+warpLabel.Text = "TRANSFERT INTER-SERVEURS EN COURS..."
+warpLabel.Parent = warpOverlay
+
+local currentZoneId = tonumber(Workspace:GetAttribute("ZoneId")) or 1
+local currentZoneName = tostring(Workspace:GetAttribute("ZoneName") or "ZONE 1")
+local currentRunLevel = 1
+
+local function formatXPValue(val: number): string
+	if math.abs(val - math.round(val)) < 0.005 then
+		return string.format("%.0f", val)
+	end
+	local s = string.format("%.2f", val)
+	s = string.gsub(s, "0+$", "")
+	s = string.gsub(s, "%.$", "")
+	return s
+end
+
+local function refreshLocalPortalVisuals()
+	local arena = Workspace:FindFirstChild("MechaArena")
+	if not arena then return end
+	local portalModel = arena:FindFirstChild("ZonePortalModel")
+	if not portalModel then return end
+
+	local reqLevel = tonumber(Workspace:GetAttribute("NextZoneRequiredLevel")) or 0
+	if reqLevel <= 0 then return end
+
+	local unlocked = currentRunLevel >= reqLevel
+	local statusColor = if unlocked then Color3.fromRGB(40, 255, 145) else Color3.fromRGB(255, 75, 55)
+
+	local core = portalModel:FindFirstChild("ZonePortalCore") :: BasePart?
+	if core then
+		core.Color = statusColor
+	end
+	local beam = portalModel:FindFirstChild("ZonePortalBeam") :: BasePart?
+	if beam then
+		beam.Color = statusColor
+		beam.Transparency = if unlocked then 0.58 else 0.80
+	end
+
+	local anchor = portalModel:FindFirstChild("PortalLabelAnchor")
+	local bb = if anchor then anchor:FindFirstChild("PortalBillboard") else nil
+	local bg = if bb then bb:FindFirstChild("BG") else nil
+	local reqLbl = if bg then bg:FindFirstChild("ReqLabel") :: TextLabel? else nil
+	if reqLbl then
+		reqLbl.TextColor3 = statusColor
+		if unlocked then
+			reqLbl.Text = "⚡ DÉVERROUILLÉ — MARCHEZ SUR LE TÉLÉPORTEUR !"
+		else
+			reqLbl.Text = string.format("VERROUILLÉ — NIVEAU %d REQUIS (ACTUEL : %d/%d)", reqLevel, currentRunLevel, reqLevel)
+		end
+	end
+end
+
+Workspace:GetAttributeChangedSignal("ZoneId"):Connect(function()
+	currentZoneId = tonumber(Workspace:GetAttribute("ZoneId")) or 1
+	currentZoneName = tostring(Workspace:GetAttribute("ZoneName") or ("ZONE " .. currentZoneId))
+	task.defer(refreshLocalPortalVisuals)
+end)
+
+Workspace.ChildAdded:Connect(function(child)
+	if child.Name == "MechaArena" then
+		task.delay(0.15, refreshLocalPortalVisuals)
+	end
+end)
+task.defer(refreshLocalPortalVisuals)
+
+local function showPortalBanner(message: string)
+	gbTitle.Text = "⚡ TÉLÉPORTEUR INTER-ZONES ACTIVÉ ⚡"
+	gbDesc.Text = message
+	globalLevelUpBanner.Visible = true
+	local slideIn = TweenService:Create(globalLevelUpBanner, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 96),
+	})
+	slideIn:Play()
+	task.delay(5.0, function()
+		local slideOut = TweenService:Create(globalLevelUpBanner, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 0, -110),
+		})
+		slideOut:Play()
+		slideOut.Completed:Connect(function()
+			globalLevelUpBanner.Visible = false
+		end)
+	end)
+end
+
 -- --- 9. SYNCHRONISATION DU STATUT RÉSEAU & META-PROGRESSION ---
 local currentSurvivingWave = 1
 local prevHP: number? = nil
@@ -1465,10 +1569,31 @@ Remotes.GetEvent("MetaSync").OnClientEvent:Connect(function(data: any)
 end)
 
 Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
+	if data.zoneId then
+		currentZoneId = data.zoneId
+	end
+	if data.zoneName and data.zoneName ~= "" then
+		currentZoneName = data.zoneName
+	end
+
+	if data.teleportingToZone ~= nil then
+		if data.teleportingToZone ~= "" then
+			warpLabel.Text = "⚡ TRANSFERT VERS " .. tostring(data.teleportingToZone) .. "..."
+			warpOverlay.Visible = true
+		else
+			warpOverlay.Visible = false
+		end
+	end
+
+	if data.portalUnlockedAlert then
+		showPortalBanner(tostring(data.portalUnlockedAlert))
+	end
+
 	if data.isDead then
 		gameOverModal.Visible = true
 		goStatsText.Text = string.format(
-			"• Vagues tenues : Vague %d\n• Niveau de combat : Niv. %s\n• Emplacements : %d Armes | %d Passifs | %d Stats\n• ADN de compte : %d XP enregistré !",
+			"• Secteur atteint : %s (Vague %d)\n• Niveau de combat : %s\n• Emplacements : %d Armes | %d Passifs | %d Stats\n• ADN de compte : %d XP enregistré !",
+			currentZoneName,
 			currentSurvivingWave,
 			levelBadge.Text,
 			cachedMaxWeaponSlots,
@@ -1536,20 +1661,28 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.level and data.currentXP ~= nil and data.xpToNextLevel then
+		currentRunLevel = data.level
 		levelBadge.Text = "NIV. " .. data.level
 		local xpRatio = math.clamp(data.currentXP / data.xpToNextLevel, 0, 1)
 		xpBarFill.Size = UDim2.new(xpRatio, 0, 1, 0)
-		xpText.Text = string.format("%.0f / %.0f XP", data.currentXP, data.xpToNextLevel)
+		xpText.Text = string.format("%s / %.0f XP", formatXPValue(data.currentXP), data.xpToNextLevel)
 
 		if overheadXpFill then
 			overheadXpFill.Size = UDim2.new(xpRatio, 0, 1, 0)
 		end
 		updateXpNotches(data.xpToNextLevel)
+		refreshLocalPortalVisuals()
 	end
 
 	if data.wave then
 		currentSurvivingWave = data.wave
-		waveInfoLabel.Text = string.format("VAGUE %d (%ds) | %d ENNEMIS", data.wave, data.waveTimer or 0, data.activeEnemies or 0)
+		if data.waveState == "BOSS" then
+			waveInfoLabel.TextColor3 = Color3.fromRGB(255, 75, 85)
+			waveInfoLabel.Text = string.format("ZONE %d • BOSS VAGUE %d (%ds)", currentZoneId, data.wave, data.waveTimer or 0)
+		else
+			waveInfoLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
+			waveInfoLabel.Text = string.format("ZONE %d • VAGUE %d (%ds) | %d FOES", currentZoneId, data.wave, data.waveTimer or 0, data.activeEnemies or 0)
+		end
 	end
 
 	-- Populate 3-Row Inventory Slots (Faithful to Unity UIManager.cs)

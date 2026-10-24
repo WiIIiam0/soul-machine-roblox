@@ -378,6 +378,44 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
+function WeaponService.ExportState(player: Player): { [string]: number }?
+	local state = playerWeaponsMap[player]
+	if not state then return nil end
+	local copy: { [string]: number } = {}
+	for wId, rank in pairs(state.weapons) do
+		copy[wId] = rank
+	end
+	return copy
+end
+
+function WeaponService.ImportState(player: Player, savedWeapons: any)
+	if type(savedWeapons) ~= "table" then return end
+	local state: PlayerWeaponState = {
+		weapons = {},
+		cooldowns = {},
+		overdriveCooldown = 0,
+	}
+	local count = 0
+	for wId, rank in pairs(savedWeapons) do
+		if type(wId) == "string" and type(rank) == "number" then
+			local def = WeaponsData.GetWeapon(wId)
+			if def and rank >= 1 then
+				state.weapons[wId] = math.clamp(math.floor(rank), 1, #def.ranks)
+				state.cooldowns[wId] = 0
+				count += 1
+			end
+		end
+	end
+	if count == 0 then
+		state.weapons["StarterGun"] = 1
+		state.cooldowns["StarterGun"] = 0
+	end
+	playerWeaponsMap[player] = state
+	Remotes.GetEvent("StateSync"):FireClient(player, {
+		weapons = state.weapons,
+	})
+end
+
 function WeaponService.Cleanup(player: Player)
 	playerWeaponsMap[player] = nil
 end

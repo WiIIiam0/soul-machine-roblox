@@ -1,171 +1,255 @@
 --!strict
--- EnemyDirector.luau: Economy-based Game Director managing wave state machine, credit rate, and bestiary unlocks
+-- EnemyDirector.luau: Directeur de spawn continu par vagues infinies, calibré par Zone (sans scaling par vague) et proportionnel au nombre de joueurs (N joueurs = N x spawns)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local EnemiesData = require(Shared:WaitForChild("EnemiesData"))
+local ZonesData = require(Shared:WaitForChild("ZonesData"))
 local GameEvents = require(Shared:WaitForChild("GameEvents"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
+local ArenaBuilder = require(script.Parent.ArenaBuilder)
 local EnemyService = require(script.Parent.EnemyService)
 local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
+local ZoneService = require(script.Parent.ZoneService)
 
-export type WaveState = "SPAWNING" | "CLEARING" | "RESTING" | "BOSS"
+export type WaveState = "SPAWNING" | "BOSS"
 
 local EnemyDirector = {}
 
-local currentWave = 1
-local waveState: WaveState = "RESTING"
-local stateTimer = 5.0 -- 5s initial countdown
+local NORMAL_WAVE_DURATION = 35.0
+local BOSS_WAVE_DURATION = 45.0
+local META_ENEMY_BASE_INTERVAL = 45.0
 
--- Economy parameters
-local currentCredits = 40.0
-local baseSpawnRate = 12.0 -- Credits gained per second
-local spawnAcceleration = 0.20 -- Rate grows per second
-local currentSpawnRate = 12.0
-
-local SPAWN_DURATION = 40.0 -- 40 seconds of intense wave spawning
-local REST_DURATION = 5.0   -- 5 seconds pause between waves
-
--- Meta Enemy timer
-local metaEnemyInterval = 45.0
+local isRunning = false
+local currentWave = 0
+local waveState: WaveState = "SPAWNING"
+local stateTimer = 0.0
+local waveElapsed = 0.0
+local currentCredits = 0.0
 local metaEnemyTimer = 0.0
+local syncTimer = 0.0
+local currentBossEnemy: EnemyService.ActiveEnemy? = nil
 
-local function getEligibleEnemies(): { string }
-	if currentWave == 1 then
-		return { "ScoutDrone", "AssaultMecha" }
-	elseif currentWave == 2 then
-		return { "ScoutDrone", "AssaultMecha", "SniperBot" }
-	elseif currentWave == 3 then
-		return { "ScoutDrone", "AssaultMecha", "SniperBot", "HeavyJuggernaut" }
-	else
-		return { "ScoutDrone", "AssaultMecha", "SniperBot", "HeavyJuggernaut", "KamikazeRoller" }
-	end
-end
-
-local function spawnEnemyAroundPlayers(enemyId: string)
-	local alivePlayers: { Player } = {}
+local function getAlivePlayers(): { Player }
+	local alive: { Player } = {}
 	for _, p in ipairs(Players:GetPlayers()) do
-		local pData = PlayerStatsManager.GetPlayerData(p)
-		if pData and not pData.isDead and p and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-			table.insert(alivePlayers, p)
+		if not ZoneService.IsPlayerTeleporting(p) then
+			local pData = PlayerStatsManager.GetPlayerData(p)
+			if pData and not pData.isDead and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+				table.insert(alive, p)
+			end
 		end
 	end
+	return alive
+end
 
-	if #alivePlayers == 0 then return end
+local function countActiveEnemies(): number
+	local count = 0
+	for _, e in pairs(EnemyService.GetActiveEnemies()) do
+		if not e.isDead then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function makeZoneStatOverrides(zone: ZonesData.ZoneConfig, playerScale: number?): EnemyService.SpawnOverrides
+	return {
+		hpMult = zone.enemyHpMult,
+		damageMult = zone.enemyDamageMult,
+		xpMult = zone.enemyXpMult,
+		playerScale = playerScale or 1,
+	}
+end
+
+local function spawnAroundAlivePlayers(enemyId: string, alivePlayers: { Player }, overrides: EnemyService.SpawnOverrides): EnemyService.ActiveEnemy?
+	if #alivePlayers == 0 then
+		return nil
+	end
 
 	local chosenPlayer = alivePlayers[math.random(1, #alivePlayers)]
-	local hrp = chosenPlayer.Character:FindFirstChild("HumanoidRootPart") :: BasePart
-	local centerPos = hrp.Position
+	local char = chosenPlayer.Character
+	if not char then return nil end
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return nil end
 
-	-- Random angle on outer ring (radius 32 to 52 studs)
+	local centerPos = hrp.Position
 	local angle = math.random() * math.pi * 2
 	local dist = math.random(32, 52)
 	local spawnPos = centerPos + Vector3.new(math.cos(angle) * dist, 0.5, math.sin(angle) * dist)
 
-	-- Clamp within arena boundaries (inside laser walls at +/- 72)
 	spawnPos = Vector3.new(
-		math.clamp(spawnPos.X, -66, 66),
+		math.clamp(spawnPos.X, -65, 65),
 		1.5,
-		math.clamp(spawnPos.Z, -66, 66)
+		math.clamp(spawnPos.Z, -65, 65)
 	)
 
-	EnemyService.SpawnEnemy(enemyId, spawnPos)
+	-- Évite de faire spawner un monstre pile sur le socle du téléporteur Nord
+	local portalPos = ArenaBuilder.PORTAL_POSITION
+	local dx = spawnPos.X - portalPos.X
+	local dz = spawnPos.Z - portalPos.Z
+	if (dx * dx + dz * dz) < 100 then
+		spawnPos = Vector3.new(spawnPos.X, 1.5, math.min(65, portalPos.Z + 14))
+	end
+
+	return EnemyService.SpawnEnemy(enemyId, spawnPos, overrides)
 end
 
-function EnemyDirector.Start()
-	waveState = "RESTING"
-	stateTimer = REST_DURATION
-end
-
-local function broadcastWaveState()
-	local activeEnemies = EnemyService.GetActiveEnemies()
-	local enemyCount = 0
-	for _ in pairs(activeEnemies) do enemyCount += 1 end
+local function broadcastWaveState(aliveCount: number)
+	local zone = ZoneService.GetCurrentZoneConfig()
+	local enemyCount = countActiveEnemies()
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		Remotes.GetEvent("StateSync"):FireClient(player, {
-			wave = currentWave,
+			zoneId = zone.zoneId,
+			zoneName = zone.name,
+			wave = math.max(1, currentWave),
 			waveState = waveState,
-			waveTimer = math.ceil(stateTimer),
+			waveTimer = math.max(0, math.ceil(stateTimer)),
 			activeEnemies = enemyCount,
+			alivePlayers = aliveCount,
 		})
 	end
 end
 
-RunService.Heartbeat:Connect(function(dt: number)
-	stateTimer -= dt
-	metaEnemyTimer += dt
+local function startNextWave(alivePlayers: { Player })
+	local zone = ZoneService.GetCurrentZoneConfig()
+	local aliveCount = math.max(1, #alivePlayers)
 
-	-- Periodic Meta Enemy Spawn
-	if metaEnemyTimer >= metaEnemyInterval then
-		metaEnemyTimer = 0
-		spawnEnemyAroundPlayers("MetaDrone")
+	currentWave += 1
+	waveElapsed = 0.0
+	GameEvents.OnWaveStart:Fire(currentWave)
+
+	if currentWave % ZonesData.BOSS_WAVE_INTERVAL == 0 then
+		-- Vague de Boss toutes les 10 vagues (sans montée de niveau par vague, mais calibrée sur la Zone et le nombre de joueurs)
+		waveState = "BOSS"
+		stateTimer = BOSS_WAVE_DURATION
+		currentCredits = (zone.baseCreditsPerWave * 0.5) * aliveCount
+
+		currentBossEnemy = spawnAroundAlivePlayers(
+			zone.bossId,
+			alivePlayers,
+			makeZoneStatOverrides(zone, aliveCount)
+		)
+
+		local escortCount = 2 * aliveCount
+		local escortOverrides = makeZoneStatOverrides(zone, 1)
+		for _ = 1, escortCount do
+			spawnAroundAlivePlayers(zone.bossEscortId, alivePlayers, escortOverrides)
+		end
+	else
+		-- Vague normale en flux continu : crédits proportionnels au nombre de joueurs (3 joueurs = 3x spawns)
+		waveState = "SPAWNING"
+		stateTimer = NORMAL_WAVE_DURATION
+		currentBossEnemy = nil
+		currentCredits += zone.baseCreditsPerWave * aliveCount
 	end
 
-	if waveState == "RESTING" then
-		if stateTimer <= 0 then
-			-- Transition to next wave
-			currentWave += 1
-			GameEvents.OnWaveStart:Fire(currentWave)
+	broadcastWaveState(#alivePlayers)
+end
 
-			if currentWave % 5 == 0 then
-				-- Boss Wave!
-				waveState = "BOSS"
-				stateTimer = 60.0
-				spawnEnemyAroundPlayers("OverlordBoss")
-				for _ = 1, 4 do
-					spawnEnemyAroundPlayers("HeavyJuggernaut")
-				end
-			else
-				waveState = "SPAWNING"
-				stateTimer = SPAWN_DURATION
-				currentCredits = 30 + (currentWave * 15)
-				currentSpawnRate = baseSpawnRate + (currentWave * 2.5)
-			end
+function EnemyDirector.ResetForZone()
+	currentWave = 0
+	waveState = "SPAWNING"
+	stateTimer = 0.0
+	waveElapsed = 0.0
+	currentCredits = 0.0
+	metaEnemyTimer = 0.0
+	currentBossEnemy = nil
+end
+
+function EnemyDirector.Start()
+	EnemyDirector.ResetForZone()
+	isRunning = true
+end
+
+ZoneService.OnZoneChanged(function(_newZoneId: number)
+	EnemyDirector.ResetForZone()
+end)
+
+RunService.Heartbeat:Connect(function(dt: number)
+	if not isRunning then return end
+
+	local alivePlayers = getAlivePlayers()
+	local aliveCount = #alivePlayers
+
+	syncTimer += dt
+	if aliveCount == 0 then
+		if syncTimer >= 0.5 then
+			syncTimer = 0
+			broadcastWaveState(0)
 		end
+		return
+	end
 
-	elseif waveState == "SPAWNING" then
-		-- Economy credit accumulation
-		currentSpawnRate += spawnAcceleration * dt
-		currentCredits += currentSpawnRate * dt
+	-- Démarrage immédiat de la Vague 1 dès qu'un premier joueur est présent
+	if currentWave == 0 then
+		startNextWave(alivePlayers)
+	end
 
-		-- Spend credits to spawn enemies
-		local eligible = getEligibleEnemies()
+	local zone = ZoneService.GetCurrentZoneConfig()
+	stateTimer -= dt
+	waveElapsed += dt
+
+	-- MetaDrone doré : fréquence multipliée par le nombre de joueurs (N joueurs = N x spawns)
+	metaEnemyTimer += dt * aliveCount
+	while metaEnemyTimer >= META_ENEMY_BASE_INTERVAL do
+		metaEnemyTimer -= META_ENEMY_BASE_INTERVAL
+		spawnAroundAlivePlayers("MetaDrone", alivePlayers, makeZoneStatOverrides(zone, 1))
+	end
+
+	-- Accumulation continue de crédits proportionnelle à aliveCount (strictement aucun scaling par numéro de vague)
+	local rateMultiplier = if waveState == "BOSS" then 0.65 else 1.0
+	local spawnRate = zone.baseSpawnRatePerPlayer * aliveCount * rateMultiplier
+	currentCredits += spawnRate * dt
+
+	-- Dépense des crédits pour faire spawner les ennemis autour des joueurs vivants
+	local maxSimultaneousEnemies = math.max(65, 60 * aliveCount)
+	local activeCount = countActiveEnemies()
+	if activeCount < maxSimultaneousEnemies then
+		local eligible = zone.eligibleEnemies
+		local minCost = 25
+		local maxSpawnsThisTick = 8 * aliveCount
 		local attempts = 0
-		while currentCredits >= 25 and attempts < 10 do
+		local overrides = makeZoneStatOverrides(zone, 1)
+
+		while currentCredits >= minCost and attempts < maxSpawnsThisTick and activeCount < maxSimultaneousEnemies do
 			attempts += 1
 			local chosenId = eligible[math.random(1, #eligible)]
-			local conf = require(Shared:WaitForChild("EnemiesData")).GetEnemy(chosenId)
+			local conf = EnemiesData.GetEnemy(chosenId)
 			if conf and currentCredits >= conf.cost then
 				currentCredits -= conf.cost
-				spawnEnemyAroundPlayers(chosenId)
+				local spawned = spawnAroundAlivePlayers(chosenId, alivePlayers, overrides)
+				if spawned then
+					activeCount += 1
+				end
 			else
 				break
 			end
 		end
-
-		if stateTimer <= 0 then
-			waveState = "CLEARING"
-			stateTimer = 30.0 -- Max time to clear remaining enemies
-		end
-
-	elseif waveState == "CLEARING" or waveState == "BOSS" then
-		local active = EnemyService.GetActiveEnemies()
-		local count = 0
-		for _ in pairs(active) do count += 1 end
-
-		if count == 0 or stateTimer <= 0 then
-			-- Wave complete!
-			GameEvents.OnWaveCompleted:Fire(currentWave)
-			waveState = "RESTING"
-			stateTimer = REST_DURATION
-		end
+	else
+		-- Plafond anti-saturation atteint : on plafonne la réserve de crédits pour éviter une explosion d'un coup
+		currentCredits = math.min(currentCredits, zone.baseCreditsPerWave * aliveCount * 1.5)
 	end
 
-	broadcastWaveState()
+	-- Fin de vague -> enchaînement infini immédiat sur la vague suivante (y compris après un Boss !)
+	local bossDefeatedEarly = (
+		waveState == "BOSS"
+		and waveElapsed >= 10.0
+		and (currentBossEnemy == nil or currentBossEnemy.isDead)
+	)
+
+	if stateTimer <= 0 or bossDefeatedEarly then
+		GameEvents.OnWaveCompleted:Fire(currentWave)
+		startNextWave(alivePlayers)
+	elseif syncTimer >= 0.25 then
+		syncTimer = 0
+		broadcastWaveState(aliveCount)
+	end
 end)
 
 return EnemyDirector

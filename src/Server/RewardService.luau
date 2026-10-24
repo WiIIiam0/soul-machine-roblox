@@ -35,6 +35,8 @@ export type RewardCard = {
 
 local RewardService = {}
 local pendingRewardsMap: { [Player]: { RewardCard } } = {}
+local queuedLevelUpsMap: { [Player]: number } = {}
+local offerGenerationMap: { [Player]: number } = {}
 
 local STAT_LIST: { StatTypes.StatType } = {
 	"MaxHP", "Speed", "DamageMultiplier", "FireRateMultiplier", "Armor", "CriticalChance", "PickupRadius", "LifeSteal", "BurnDamage", "RangeMultiplier",
@@ -284,32 +286,83 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 	return cards
 end
 
-function RewardService.OfferLevelUpRewards(player: Player)
+local function applyChosenCard(player: Player, chosenCard: RewardCard)
+	if chosenCard.category == "WEAPON" and chosenCard.weaponId then
+		WeaponService.AddOrUpgradeWeapon(player, chosenCard.weaponId)
+	elseif chosenCard.category == "STAT" and chosenCard.statType and chosenCard.statValue then
+		PlayerStatsManager.AddStat(player, chosenCard.statType, chosenCard.statValue)
+	elseif chosenCard.category == "PASSIVE" and chosenCard.passiveDef then
+		PassiveService.AddPassive(player, chosenCard.passiveDef)
+	end
+end
+
+local function presentNextRewardModal(player: Player)
+	if not player.Parent then return end
 	local cards = RewardService.GenerateCards(player)
 	pendingRewardsMap[player] = cards
+
+	local gen = (offerGenerationMap[player] or 0) + 1
+	offerGenerationMap[player] = gen
 
 	-- Phase Shift / Invulnerability and untargetability during Level Up
 	PlayerStatsManager.SetLevelUpPhase(player, true)
 
 	Remotes.GetEvent("LevelUpOptions"):FireClient(player, cards)
 
-	-- Safety auto-select timeout (16 seconds)
+	-- Safety auto-select timeout (16 seconds), bound strictly to this generation ID
 	task.delay(16, function()
+		if offerGenerationMap[player] ~= gen then return end
 		local pending = pendingRewardsMap[player]
 		if pending and pending[1] then
 			local chosenCard = pending[1]
 			pendingRewardsMap[player] = nil
-			PlayerStatsManager.SetLevelUpPhase(player, false)
+			applyChosenCard(player, chosenCard)
 
-			if chosenCard.category == "WEAPON" and chosenCard.weaponId then
-				WeaponService.AddOrUpgradeWeapon(player, chosenCard.weaponId)
-			elseif chosenCard.category == "STAT" and chosenCard.statType and chosenCard.statValue then
-				PlayerStatsManager.AddStat(player, chosenCard.statType, chosenCard.statValue)
-			elseif chosenCard.category == "PASSIVE" and chosenCard.passiveDef then
-				PassiveService.AddPassive(player, chosenCard.passiveDef)
+			local queued = queuedLevelUpsMap[player] or 0
+			if queued > 0 then
+				queuedLevelUpsMap[player] = queued - 1
+				presentNextRewardModal(player)
+			else
+				PlayerStatsManager.SetLevelUpPhase(player, false)
 			end
 		end
 	end)
+end
+
+function RewardService.OfferLevelUpRewards(player: Player)
+	if pendingRewardsMap[player] ~= nil then
+		queuedLevelUpsMap[player] = (queuedLevelUpsMap[player] or 0) + 1
+		return
+	end
+	presentNextRewardModal(player)
+end
+
+function RewardService.ExportUnclaimedCount(player: Player): number
+	local count = queuedLevelUpsMap[player] or 0
+	if pendingRewardsMap[player] ~= nil then
+		count += 1
+	end
+	return count
+end
+
+function RewardService.ImportUnclaimedCount(player: Player, count: number)
+	pendingRewardsMap[player] = nil
+	queuedLevelUpsMap[player] = 0
+	if count > 0 then
+		queuedLevelUpsMap[player] = math.max(0, math.floor(count) - 1)
+		task.defer(function()
+			if player.Parent then
+				presentNextRewardModal(player)
+			end
+		end)
+	end
+end
+
+function RewardService.ResetPlayer(player: Player)
+	pendingRewardsMap[player] = nil
+	queuedLevelUpsMap[player] = nil
+	offerGenerationMap[player] = (offerGenerationMap[player] or 0) + 1
+	PlayerStatsManager.SetLevelUpPhase(player, false)
 end
 
 -- Handle choice response
@@ -323,21 +376,24 @@ selectRemote.OnServerEvent:Connect(function(player: Player, choiceIndex: number)
 
 	local chosenCard = pending[choiceIndex]
 	pendingRewardsMap[player] = nil
+	offerGenerationMap[player] = (offerGenerationMap[player] or 0) + 1
 
-	-- Remove invulnerability & restore normal visibility/aggro
-	PlayerStatsManager.SetLevelUpPhase(player, false)
+	applyChosenCard(player, chosenCard)
 
-	if chosenCard.category == "WEAPON" and chosenCard.weaponId then
-		WeaponService.AddOrUpgradeWeapon(player, chosenCard.weaponId)
-	elseif chosenCard.category == "STAT" and chosenCard.statType and chosenCard.statValue then
-		PlayerStatsManager.AddStat(player, chosenCard.statType, chosenCard.statValue)
-	elseif chosenCard.category == "PASSIVE" and chosenCard.passiveDef then
-		PassiveService.AddPassive(player, chosenCard.passiveDef)
+	local queued = queuedLevelUpsMap[player] or 0
+	if queued > 0 then
+		queuedLevelUpsMap[player] = queued - 1
+		presentNextRewardModal(player)
+	else
+		-- Remove invulnerability & restore normal visibility/aggro
+		PlayerStatsManager.SetLevelUpPhase(player, false)
 	end
 end)
 
 function RewardService.Cleanup(player: Player)
 	pendingRewardsMap[player] = nil
+	queuedLevelUpsMap[player] = nil
+	offerGenerationMap[player] = nil
 	PlayerStatsManager.SetLevelUpPhase(player, false)
 end
 

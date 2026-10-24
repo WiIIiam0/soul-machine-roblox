@@ -283,4 +283,21 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 end)
 
+function ProjectileService.ClearAll()
+	for i = #activeProjectiles, 1, -1 do
+		local p = activeProjectiles[i]
+		if p.part and p.part.Parent then
+			p.part:Destroy()
+		end
+		table.remove(activeProjectiles, i)
+	end
+	for i = #enemyBullets, 1, -1 do
+		local b = enemyBullets[i]
+		if b.part and b.part.Parent then
+			b.part:Destroy()
+		end
+		table.remove(enemyBullets, i)
+	end
+end
+
 return ProjectileService

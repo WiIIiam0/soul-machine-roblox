@@ -293,6 +293,75 @@ function PlayerStatsManager.SyncToClient(player: Player)
 	})
 end
 
+function PlayerStatsManager.ExportState(player: Player): any?
+	local data = playerDataMap[player]
+	if not data then return nil end
+
+	local bonusesCopy: { [string]: number } = {}
+	for k, v in pairs(data.statBonuses) do
+		bonusesCopy[k] = v
+	end
+
+	local cardLevelsCopy: { [string]: number } = {}
+	for k, v in pairs(data.statCardLevels) do
+		cardLevelsCopy[k] = v
+	end
+
+	return {
+		currentHP = data.currentHP,
+		maxHP = data.maxHP,
+		currentOverdrive = data.currentOverdrive,
+		statBonuses = bonusesCopy,
+		statCardLevels = cardLevelsCopy,
+	}
+end
+
+function PlayerStatsManager.ImportState(player: Player, saved: any)
+	if type(saved) ~= "table" then return end
+	local data = playerDataMap[player] or PlayerStatsManager.InitPlayer(player)
+
+	if type(saved.statBonuses) == "table" then
+		for k, v in pairs(saved.statBonuses) do
+			if type(k) == "string" and type(v) == "number" then
+				(data.statBonuses :: any)[k] = v
+			end
+		end
+	end
+
+	if type(saved.statCardLevels) == "table" then
+		data.statCardLevels = {}
+		for k, v in pairs(saved.statCardLevels) do
+			if type(k) == "string" and type(v) == "number" then
+				data.statCardLevels[k] = math.floor(v)
+			end
+		end
+	end
+
+	data.currentOverdrive = math.clamp(tonumber(saved.currentOverdrive) or 0, 0, data.maxOverdrive)
+	data.isDead = false
+	data.isLevelUpPhase = false
+
+	PlayerStatsManager.RecalculateStats(player)
+
+	if type(saved.currentHP) == "number" and saved.currentHP > 0 then
+		data.currentHP = math.clamp(saved.currentHP, 1, data.maxHP)
+	else
+		data.currentHP = data.maxHP
+	end
+
+	local character = player.Character
+	if character then
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.MaxHealth = data.maxHP
+			humanoid.Health = data.currentHP
+			humanoid.WalkSpeed = data.currentStats.Speed
+		end
+	end
+
+	PlayerStatsManager.SyncToClient(player)
+end
+
 function PlayerStatsManager.Cleanup(player: Player)
 	playerDataMap[player] = nil
 end
