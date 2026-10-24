@@ -540,6 +540,77 @@ function EnemyService.GetClosestEnemy(fromPos: Vector3, maxRange: number): Activ
 	return closest
 end
 
+function EnemyService.GetClosestEnemies(fromPos: Vector3, maxRange: number, maxCount: number): { ActiveEnemy }
+	local list = {}
+	local rSq = maxRange * maxRange
+
+	for _, enemy in pairs(activeEnemies) do
+		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
+			local ePos = enemy.currentPos or enemy.rootPart.Position
+			local dx = ePos.X - fromPos.X
+			local dz = ePos.Z - fromPos.Z
+			local distSq = dx * dx + dz * dz
+			if distSq <= rSq then
+				table.insert(list, { enemy = enemy, distSq = distSq })
+			end
+		end
+	end
+	table.sort(list, function(a, b) return a.distSq < b.distSq end)
+
+	local result = {}
+	for i = 1, math.min(maxCount, #list) do
+		table.insert(result, list[i].enemy)
+	end
+	return result
+end
+
+function EnemyService.GetFocusedEnemies(fromPos: Vector3, maxRange: number, maxCount: number): { ActiveEnemy }
+	if maxCount <= 0 then return {} end
+	local inRange = {}
+	local firstEnemy: ActiveEnemy? = nil
+	local minFirstDistSq = maxRange * maxRange
+
+	for _, enemy in pairs(activeEnemies) do
+		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
+			local ePos = enemy.currentPos or enemy.rootPart.Position
+			local dx = ePos.X - fromPos.X
+			local dz = ePos.Z - fromPos.Z
+			local distSq = dx * dx + dz * dz
+			if distSq <= (maxRange * maxRange) then
+				table.insert(inRange, enemy)
+				if distSq < minFirstDistSq then
+					minFirstDistSq = distSq
+					firstEnemy = enemy
+				end
+			end
+		end
+	end
+
+	if not firstEnemy or not firstEnemy.rootPart then return {} end
+
+	local result = { firstEnemy }
+	if maxCount == 1 or #inRange <= 1 then
+		return result
+	end
+
+	local firstPos = firstEnemy.currentPos or firstEnemy.rootPart.Position
+	local others = {}
+	for _, e in ipairs(inRange) do
+		if e ~= firstEnemy and e.rootPart then
+			local ePos = e.currentPos or e.rootPart.Position
+			local dx = ePos.X - firstPos.X
+			local dz = ePos.Z - firstPos.Z
+			table.insert(others, { enemy = e, distSq = dx * dx + dz * dz })
+		end
+	end
+	table.sort(others, function(a, b) return a.distSq < b.distSq end)
+
+	for i = 1, math.min(maxCount - 1, #others) do
+		table.insert(result, others[i].enemy)
+	end
+	return result
+end
+
 function EnemyService.GetEnemiesInRange(fromPos: Vector3, radius: number): { ActiveEnemy }
 	local result: { ActiveEnemy } = {}
 	local rSq = radius * radius

@@ -91,116 +91,233 @@ function WeaponService.AddOrUpgradeWeapon(player: Player, weaponId: string): boo
 	return true
 end
 
+-- Infinite Critical Chance Logic matching Unity TheSwarm
+local function calculateCrit(critChance: number): (boolean, number)
+	if critChance <= 0 then return false, 1 end
+	local tier = math.floor(critChance / 100)
+	local remainder = critChance % 100
+	if math.random(1, 100) <= remainder then
+		tier += 1
+	end
+	if tier > 0 then
+		return true, (1 + tier)
+	end
+	return false, 1
+end
+
+-- AOE Explosion for impact/rocket damage
+local function triggerExplosionAOE(player: Player, center: Vector3, radius: number, damage: number, color: Color3)
+	Remotes.GetEvent("VFXEvent"):FireAllClients("Explosion", center, radius, color)
+	local victims = EnemyService.GetEnemiesInRange(center, radius)
+	for _, victim in ipairs(victims) do
+		EnemyService.TakeDamage(victim, damage, false, player)
+	end
+end
+
+-- Rocket recursive radial sub-chain burst matching Unity ShotRocket2
+local function triggerRocketRadialBurst(player: Player, burstPos: Vector3, rank: WeaponsData.WeaponRank, shrapnelDmg: number)
+	local numRays = 8
+	local angleStep = (math.pi * 2) / numRays
+	local rRange = 16
+
+	for i = 1, numRays do
+		local angle = i * angleStep
+		local rDir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
+		local rEnd = burstPos + rDir * rRange
+
+		-- Damage victims along each radial line
+		local midPoint = burstPos + rDir * (rRange * 0.5)
+		local victims = EnemyService.GetEnemiesInRange(midPoint, rRange * 0.5)
+		for _, v in ipairs(victims) do
+			EnemyService.TakeDamage(v, shrapnelDmg, false, player)
+		end
+
+		Remotes.GetEvent("VFXEvent"):FireAllClients("LaserTracer", burstPos, rEnd, Color3.fromRGB(255, 120, 30), 0.20)
+	end
+end
+
+-- Instant Hitscan Raycast Execution matching Unity ExecuteInstantShot
+local function executeInstantShot(
+	player: Player,
+	originPos: Vector3,
+	dir: Vector3,
+	weaponDef: WeaponsData.WeaponDefinition,
+	rank: WeaponsData.WeaponRank,
+	finalDamage: number,
+	finalRange: number,
+	isCrit: boolean
+)
+	local hits = {}
+	local active = EnemyService.GetActiveEnemies()
+
+	for _, enemy in pairs(active) do
+		if not enemy.isDead and enemy.rootPart and enemy.rootPart.Parent then
+			local ePos = enemy.currentPos or enemy.rootPart.Position
+			local v = ePos - originPos
+			local t = v:Dot(dir)
+			if t > 0 and t <= finalRange then
+				local projPoint = originPos + dir * t
+				local perpDist = (ePos - projPoint).Magnitude
+				local hitRadius = (enemy.config.size.X * 0.5) + 1.2
+				if perpDist <= hitRadius then
+					table.insert(hits, { enemy = enemy, distance = t, hitPoint = projPoint })
+				end
+			end
+		end
+	end
+
+	table.sort(hits, function(a, b) return a.distance < b.distance end)
+
+	local finalPoint = originPos + dir * finalRange
+	local pierceLimit = rank.pierceCount
+	local hitCount = 0
+
+	for _, h in ipairs(hits) do
+		local enemy = h.enemy
+		if enemy and not enemy.isDead then
+			EnemyService.TakeDamage(enemy, finalDamage, isCrit, player)
+
+			if rank.inflictsBurn then
+				EnemyService.ApplyBurn(enemy, rank.burnStacks, player)
+			end
+
+			if rank.explosionRadius > 0 then
+				triggerExplosionAOE(player, h.hitPoint, rank.explosionRadius, finalDamage * 0.75, rank.color)
+			end
+
+			hitCount += 1
+			if hitCount > pierceLimit then
+				finalPoint = h.hitPoint
+				if weaponDef.id == "Rocket" then
+					triggerRocketRadialBurst(player, finalPoint, rank, finalDamage * 0.5)
+				end
+				break
+			end
+		end
+	end
+
+	-- Broadcast instant laser visual tracer to clients
+	Remotes.GetEvent("VFXEvent"):FireAllClients("LaserTracer", originPos, finalPoint, rank.color, 0.35)
+end
+
 local function fireShotPattern(player: Player, weaponDef: WeaponsData.WeaponDefinition, rank: WeaponsData.WeaponRank, originPos: Vector3, aimDir: Vector3)
 	local pData = PlayerStatsManager.GetPlayerData(player)
 	if not pData then return end
 
 	local stats = pData.currentStats
 
-	-- Calculate final damage with scaling ratio
-	local finalDamage = rank.damage * stats.DamageMultiplier
+	-- Calculate final damage with scaling ratio and critical hit
+	local scalingMult = PlayerStatsManager.GetWeaponScalingMultiplier(player, weaponDef.scalingStat, weaponDef.scalingRatio)
+	local baseDamage = rank.damage * stats.DamageMultiplier * scalingMult
 	local finalRange = rank.range * stats.RangeMultiplier
+
+	local isCrit, critMultiplier = calculateCrit(stats.CriticalChance)
+	local finalDamage = baseDamage * critMultiplier
 
 	local behavior = weaponDef.behavior
 	local count = rank.projectileCount
 
+	local function dispatchShot(dir: Vector3)
+		if rank.isInstant then
+			executeInstantShot(player, originPos, dir, weaponDef, rank, finalDamage, finalRange, isCrit)
+		else
+			ProjectileService.SpawnPlayerProjectile(
+				player,
+				originPos,
+				dir,
+				finalDamage,
+				finalRange,
+				rank.speed,
+				rank.pierceCount,
+				rank.isHoming,
+				rank.homingTurnSpeed,
+				rank.inflictsBurn,
+				rank.burnStacks,
+				rank.explosionRadius,
+				rank.color,
+				rank.bulletSize
+			)
+		end
+	end
+
 	if behavior == "RADIAL" then
-		-- 360 degree circle
 		local angleStep = (math.pi * 2) / count
 		for i = 1, count do
 			local angle = i * angleStep
 			local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
-			ProjectileService.SpawnPlayerProjectile(
-				player,
-				originPos,
-				dir,
-				finalDamage,
-				finalRange,
-				rank.speed,
-				rank.pierceCount,
-				rank.isHoming,
-				rank.homingTurnSpeed,
-				rank.inflictsBurn,
-				rank.burnStacks,
-				rank.explosionRadius,
-				rank.color,
-				rank.bulletSize
-			)
+			dispatchShot(dir)
 		end
 
 	elseif behavior == "CONE" then
-		-- Shotgun fan
-		local spreadRad = math.rad(rank.spreadAngle)
-		local baseAngle = math.atan2(aimDir.Z, aimDir.X)
-		local halfSpread = spreadRad * 0.5
-		local step = if count > 1 then spreadRad / (count - 1) else 0
+		if count == 1 then
+			dispatchShot(aimDir)
+		else
+			local spreadRad = math.rad(rank.spreadAngle)
+			local startAngle = -spreadRad * (count - 1) * 0.5
+			local baseAngle = math.atan2(aimDir.Z, aimDir.X)
+			for i = 1, count do
+				local angle = baseAngle + (startAngle + (i - 1) * spreadRad)
+				local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
+				dispatchShot(dir)
+			end
+		end
 
-		for i = 1, count do
-			local currentAngle = (baseAngle - halfSpread) + ((i - 1) * step)
-			local dir = Vector3.new(math.cos(currentAngle), 0, math.sin(currentAngle)).Unit
-			ProjectileService.SpawnPlayerProjectile(
-				player,
-				originPos,
-				dir,
-				finalDamage,
-				finalRange,
-				rank.speed,
-				rank.pierceCount,
-				rank.isHoming,
-				rank.homingTurnSpeed,
-				rank.inflictsBurn,
-				rank.burnStacks,
-				rank.explosionRadius,
-				rank.color,
-				rank.bulletSize
-			)
+	elseif behavior == "TRUE_SHOTGUN" then
+		-- First shot straight along aimDir, remainder randomized within spreadAngle
+		dispatchShot(aimDir)
+		for _ = 2, count do
+			local sign = if math.random() > 0.5 then 1 else -1
+			local rndDeg = sign * (1 + math.random() * (math.max(2, rank.spreadAngle) - 1))
+			local angle = math.atan2(aimDir.Z, aimDir.X) + math.rad(rndDeg)
+			local dir = Vector3.new(math.cos(angle), 0, math.sin(angle)).Unit
+			dispatchShot(dir)
+		end
+
+	elseif behavior == "TARGETED" then
+		local targets = EnemyService.GetClosestEnemies(originPos, finalRange, count)
+		if #targets > 0 then
+			for _, target in ipairs(targets) do
+				if target.rootPart then
+					local toT = (target.rootPart.Position - originPos)
+					local dir = Vector3.new(toT.X, 0, toT.Z).Unit
+					dispatchShot(dir)
+				end
+			end
+		else
+			for _ = 1, count do
+				local rndAngle = math.random() * math.pi * 2
+				local dir = Vector3.new(math.cos(rndAngle), 0, math.sin(rndAngle)).Unit
+				dispatchShot(dir)
+			end
+		end
+
+	elseif behavior == "FOCUSED" then
+		local targets = EnemyService.GetFocusedEnemies(originPos, finalRange, count)
+		if #targets > 0 then
+			for _, target in ipairs(targets) do
+				if target.rootPart then
+					local toT = (target.rootPart.Position - originPos)
+					local dir = Vector3.new(toT.X, 0, toT.Z).Unit
+					dispatchShot(dir)
+				end
+			end
+		else
+			dispatchShot(aimDir)
 		end
 
 	else
-		-- TARGETED or HOMING
+		-- HOMING (Physical missiles)
 		if count == 1 then
-			ProjectileService.SpawnPlayerProjectile(
-				player,
-				originPos,
-				aimDir,
-				finalDamage,
-				finalRange,
-				rank.speed,
-				rank.pierceCount,
-				rank.isHoming,
-				rank.homingTurnSpeed,
-				rank.inflictsBurn,
-				rank.burnStacks,
-				rank.explosionRadius,
-				rank.color,
-				rank.bulletSize
-			)
+			dispatchShot(aimDir)
 		else
-			-- Small cone spread for multiple shots
-			local spreadRad = math.rad(rank.spreadAngle > 0 and rank.spreadAngle or 12)
+			local spreadRad = math.rad(rank.spreadAngle > 0 and rank.spreadAngle or 15)
 			local baseAngle = math.atan2(aimDir.Z, aimDir.X)
 			local halfSpread = spreadRad * 0.5
 			local step = spreadRad / (count - 1)
-
 			for i = 1, count do
 				local currentAngle = (baseAngle - halfSpread) + ((i - 1) * step)
 				local dir = Vector3.new(math.cos(currentAngle), 0, math.sin(currentAngle)).Unit
-				ProjectileService.SpawnPlayerProjectile(
-					player,
-					originPos,
-					dir,
-					finalDamage,
-					finalRange,
-					rank.speed,
-					rank.pierceCount,
-					rank.isHoming,
-					rank.homingTurnSpeed,
-					rank.inflictsBurn,
-					rank.burnStacks,
-					rank.explosionRadius,
-					rank.color,
-					rank.bulletSize
-				)
+				dispatchShot(dir)
 			end
 		end
 	end

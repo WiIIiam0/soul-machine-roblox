@@ -92,6 +92,59 @@ local function createBurnTransferBeam(startPos: Vector3, endPos: Vector3)
 	end)
 end
 
+local function createLaserTracer(startPos: Vector3, endPos: Vector3, color: Color3, beamWidth: number?)
+	local dist = (endPos - startPos).Magnitude
+	if dist <= 0.2 then return end
+
+	local width = beamWidth or 0.35
+	local mid = (startPos + endPos) * 0.5
+
+	-- Glowing Neon Laser Beam
+	local beamPart = Instance.new("Part")
+	beamPart.Name = "LaserTracer"
+	beamPart.Size = Vector3.new(width, width, dist)
+	beamPart.CFrame = CFrame.lookAt(mid, endPos)
+	beamPart.Color = color
+	beamPart.Material = Enum.Material.Neon
+	beamPart.Transparency = 0.05
+	beamPart.Anchored = true
+	beamPart.CanCollide = false
+	beamPart.CastShadow = false
+	beamPart.Parent = Workspace
+
+	local tw = TweenService:Create(beamPart, TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Transparency = 1,
+		Size = Vector3.new(0.04, 0.04, dist),
+	})
+	tw:Play()
+	tw.Completed:Connect(function()
+		beamPart:Destroy()
+	end)
+
+	-- Impact flash at target point
+	local impact = Instance.new("Part")
+	impact.Name = "LaserImpact"
+	impact.Shape = Enum.PartType.Ball
+	impact.Size = Vector3.new(width * 2, width * 2, width * 2)
+	impact.Position = endPos
+	impact.Color = color
+	impact.Material = Enum.Material.Neon
+	impact.Transparency = 0.1
+	impact.Anchored = true
+	impact.CanCollide = false
+	impact.CastShadow = false
+	impact.Parent = Workspace
+
+	local impactTween = TweenService:Create(impact, TweenInfo.new(0.10, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Transparency = 1,
+		Size = Vector3.new(width * 3.5, width * 3.5, width * 3.5),
+	})
+	impactTween:Play()
+	impactTween.Completed:Connect(function()
+		impact:Destroy()
+	end)
+end
+
 local function applyOverdriveAura(targetPlayer: Player, enable: boolean)
 	local char = targetPlayer.Character
 	if not char then return end
@@ -152,6 +205,11 @@ vfxEvent.OnClientEvent:Connect(function(eventType: string, ...: any)
 		local startPos, endPos = ...
 		if startPos and endPos then
 			createBurnTransferBeam(startPos, endPos)
+		end
+	elseif eventType == "LaserTracer" then
+		local startPos, endPos, color, width = ...
+		if startPos and endPos then
+			createLaserTracer(startPos, endPos, color or Color3.fromRGB(0, 220, 255), width)
 		end
 	elseif eventType == "OverdriveStart" then
 		local targetPlayer = ...

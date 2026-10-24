@@ -241,6 +241,41 @@ function PlayerStatsManager.TryActivateOverdrive(player: Player): boolean
 	return true
 end
 
+function PlayerStatsManager.GetWeaponScalingMultiplier(player: Player, scalingStat: string?, scalingRatio: number?): number
+	if not scalingStat or scalingStat == "None" or not scalingRatio or scalingRatio <= 0 then
+		return 1.0
+	end
+	local data = playerDataMap[player]
+	if not data then return 1.0 end
+
+	local current = data.currentStats
+	local base = data.baseStats
+	local statLevel = 0
+
+	if scalingStat == "MaxHP" then
+		statLevel = current.MaxHP / 20
+	elseif scalingStat == "Speed" then
+		statLevel = math.max(0, current.Speed - base.Speed) / 1
+	elseif scalingStat == "DamageMultiplier" then
+		statLevel = math.max(0, current.DamageMultiplier - 1.0) / 0.02
+	elseif scalingStat == "FireRateMultiplier" then
+		statLevel = math.max(0, current.FireRateMultiplier - 1.0) / 0.05
+	elseif scalingStat == "Armor" then
+		statLevel = current.Armor / 10
+	elseif scalingStat == "CriticalChance" then
+		statLevel = current.CriticalChance / 1
+	elseif scalingStat == "PickupRadius" then
+		statLevel = math.max(0, current.PickupRadius - base.PickupRadius) / 1
+	elseif scalingStat == "LifeSteal" then
+		statLevel = current.LifeSteal / 0.01
+	elseif scalingStat == "BurnDamage" then
+		statLevel = math.max(0, current.BurnDamage) / 1
+	end
+
+	if statLevel < 0 then statLevel = 0 end
+	return 1.0 + (statLevel * scalingRatio)
+end
+
 function PlayerStatsManager.SyncToClient(player: Player)
 	local data = playerDataMap[player]
 	if not data then return end

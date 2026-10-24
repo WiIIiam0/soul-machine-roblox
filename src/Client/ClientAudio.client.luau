@@ -159,6 +159,8 @@ vfxEvent.OnClientEvent:Connect(function(eventType: string, ...: any)
 		playSFX("OverdriveEnd", "forceField_002", 0.40, 0.9)
 	elseif eventType == "PassiveTrigger" then
 		playSFX("PassiveProc", "computerNoise_000", 0.25, 1.1)
+	elseif eventType == "LaserTracer" then
+		playSFX("LaserShoot", "laserSmall_000", 0.20, 0.95 + math.random() * 0.15)
 	end
 end)
 
