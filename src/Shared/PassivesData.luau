@@ -1,8 +1,8 @@
 --!strict
--- PassivesData.luau: Event-driven reactive passive abilities and procedural combinations
+-- PassivesData.luau: Combinatorial Dynamic Passives (Trigger x Effect) mirroring TheSwarm RewardManager.cs & PassiveManager.cs
 
 export type TriggerCondition = 
-	"OnEnemyKilled"
+	| "OnEnemyKilled"
 	| "OnDamageDealt"
 	| "OnDamageTaken"
 	| "OnHeal"
@@ -12,9 +12,11 @@ export type TriggerCondition =
 	| "OnLevelUp"
 	| "OnOverdrive"
 	| "OnGainXP"
+	| "OnWaveStart"
+	| "OnWeaponFire"
 
 export type PassiveEffect = 
-	"Heal"
+	| "Heal"
 	| "GainMaxHP"
 	| "GainStatDamage"
 	| "GainStatSpeed"
@@ -39,197 +41,148 @@ export type PassiveDefinition = {
 
 local PassivesData = {}
 
-local TRIGGER_INFO: { [TriggerCondition]: { label: string, baseThreshold: number } } = {
-	OnEnemyKilled = { label = "Tous les %d ennemis détruits", baseThreshold = 8 },
-	OnDamageDealt = { label = "Tous les %d dégâts infligés", baseThreshold = 140 },
-	OnDamageTaken = { label = "Tous les %d dégâts subis", baseThreshold = 30 },
-	OnHeal = { label = "Tous les %d PV soignés", baseThreshold = 25 },
-	OnMove = { label = "Tous les %d studs parcourus", baseThreshold = 75 },
-	OnStandStill = { label = "Toutes les %d s immobile", baseThreshold = 3 },
-	OnCritHit = { label = "Tous les %d coups critiques", baseThreshold = 3 },
-	OnLevelUp = { label = "À chaque montée de niveau", baseThreshold = 1 },
-	OnOverdrive = { label = "À chaque déclenchement d'Overdrive", baseThreshold = 1 },
-	OnGainXP = { label = "Tous les %d points d'XP récoltés", baseThreshold = 35 },
+-- French translations directly from TheSwarm translations.csv
+local TRIGGER_LABELS: { [TriggerCondition]: string } = {
+	OnEnemyKilled = "À l'élimination",
+	OnDamageDealt = "Dégâts infligés",
+	OnDamageTaken = "Dégâts reçus",
+	OnHeal = "Au soin",
+	OnMove = "Au déplacement",
+	OnStandStill = "À l'immobilité",
+	OnCritHit = "Au coup critique",
+	OnLevelUp = "Niveau supérieur",
+	OnOverdrive = "Lors de l'Overdrive",
+	OnGainXP = "Au gain d'XP",
+	OnWaveStart = "Début de vague",
+	OnWeaponFire = "Au tir d'arme",
 }
-PassivesData.TRIGGER_INFO = TRIGGER_INFO
+PassivesData.TRIGGER_LABELS = TRIGGER_LABELS
 
-local EFFECT_INFO: { [PassiveEffect]: { label: string, basePower: number } } = {
-	Heal = { label = "Régénère %.0f PV", basePower = 12 },
-	GainMaxHP = { label = "+%.0f PV Max permanent", basePower = 3 },
-	GainStatDamage = { label = "+%.0f%% Dégâts permanent", basePower = 0.04 },
-	GainStatSpeed = { label = "+%.1f Vitesse permanente", basePower = 0.8 },
-	GainStatFireRate = { label = "+%.0f%% Cadence permanente", basePower = 0.03 },
-	GainCritChance = { label = "+%.0f%% Critique permanent", basePower = 2 },
-	GainStatArmor = { label = "+%.0f Armure permanente", basePower = 4 },
-	GainLifeSteal = { label = "+%.1f%% Vol de Vie permanent", basePower = 0.01 },
-	ChargeOverdrive = { label = "Recharge l'Overdrive de %.0f%%", basePower = 15 },
-	GainXP = { label = "Octroie +%.0f XP bonus", basePower = 18 },
+local EFFECT_LABELS: { [PassiveEffect]: string } = {
+	Heal = "Soin direct",
+	GainMaxHP = "+PV Max",
+	GainStatDamage = "+Dégâts",
+	GainStatSpeed = "+Vitesse",
+	GainStatFireRate = "+Cadence",
+	GainCritChance = "+Critique",
+	GainStatArmor = "+Armure",
+	GainLifeSteal = "+Vol de Vie",
+	ChargeOverdrive = "Charge Overdrive",
+	GainXP = "+XP Bonus",
 }
-PassivesData.EFFECT_INFO = EFFECT_INFO
+PassivesData.EFFECT_LABELS = EFFECT_LABELS
 
-local PREMADE_PASSIVES: { PassiveDefinition } = {
-	{
-		id = "VampiricProtocol",
-		name = "Protocole Vampirique",
-		description = "Tous les 8 ennemis détruits -> Régénère 12 PV.",
-		trigger = "OnEnemyKilled",
-		effect = "Heal",
-		threshold = 8,
-		effectPower = 12,
-		icon = "rbxassetid://10709791480",
-		iconFile = "CSFSimpleSkill3_C_256_09.png",
-	},
-	{
-		id = "KineticCapacitor",
-		name = "Condensateur Cinétique",
-		description = "Tous les 75 studs parcourus -> Recharge l'Overdrive de 15%.",
-		trigger = "OnMove",
-		effect = "ChargeOverdrive",
-		threshold = 75,
-		effectPower = 15,
-		icon = "rbxassetid://10709791130",
-		iconFile = "CSFSimpleSkill3_C_256_04.png",
-	},
-	{
-		id = "EmergencyReactor",
-		name = "Réacteur de Secours",
-		description = "Tous les 30 dégâts subis -> Recharge l'Overdrive de 20%.",
-		trigger = "OnDamageTaken",
-		effect = "ChargeOverdrive",
-		threshold = 30,
-		effectPower = 20,
-		icon = "rbxassetid://10709791612",
-		iconFile = "CSFSimpleSkill3_C_256_10.png",
-	},
-	{
-		id = "SiegeModule",
-		name = "Tourelle Siège Ancrée",
-		description = "Toutes les 3s resté immobile -> Gagne +3% de Dégâts permanents.",
-		trigger = "OnStandStill",
-		effect = "GainStatDamage",
-		threshold = 3,
-		effectPower = 0.03,
-		icon = "rbxassetid://10709791281",
-		iconFile = "CSFSimpleSkill3_C_256_08.png",
-	},
-	{
-		id = "OverdriveSurge",
-		name = "Surtension Nucléaire",
-		description = "À chaque déclenchement d'Overdrive -> Soigne 25 PV immédiatement.",
-		trigger = "OnOverdrive",
-		effect = "Heal",
-		threshold = 1,
-		effectPower = 25,
-		icon = "rbxassetid://10709791437",
-		iconFile = "CSFSimpleSkill3_C_256_41.png",
-	},
-	{
-		id = "ScavengerNanites",
-		name = "Nanites Récupérateurs",
-		description = "Tous les 10 ennemis détruits -> +2 PV Max permanents.",
-		trigger = "OnEnemyKilled",
-		effect = "GainMaxHP",
-		threshold = 10,
-		effectPower = 2,
-		icon = "rbxassetid://10709791054",
-		iconFile = "CSFSimpleSkill3_C_256_07.png",
-	},
-	{
-		id = "HyperchargeCrit",
-		name = "Surcharge Critique",
-		description = "Tous les 4 coups critiques -> +3% de Cadence permanente.",
-		trigger = "OnCritHit",
-		effect = "GainStatFireRate",
-		threshold = 4,
-		effectPower = 0.03,
-		icon = "rbxassetid://10709791223",
-		iconFile = "CSFSimpleSkill3_C_256_06.png",
-	},
-	{
-		id = "ArmoredReinforcement",
-		name = "Blindage Réactif",
-		description = "Tous les 120 dégâts infligés -> +4 Armure permanente.",
-		trigger = "OnDamageDealt",
-		effect = "GainStatArmor",
-		threshold = 120,
-		effectPower = 4,
-		icon = "rbxassetid://10709791281",
-		iconFile = "CSFSimpleSkill3_C_256_05.png",
-	},
+-- Exact bucket threshold per trigger from PassiveManager.cs
+local TRIGGER_THRESHOLDS: { [TriggerCondition]: number } = {
+	OnEnemyKilled = 3,
+	OnDamageDealt = 10,
+	OnDamageTaken = 4,
+	OnHeal = 10,
+	OnMove = 10,
+	OnStandStill = 3,
+	OnCritHit = 1,
+	OnLevelUp = 1,
+	OnOverdrive = 1,
+	OnGainXP = 5,
+	OnWaveStart = 1,
+	OnWeaponFire = 10,
 }
-PassivesData.PREMADE_PASSIVES = PREMADE_PASSIVES
+PassivesData.TRIGGER_THRESHOLDS = TRIGGER_THRESHOLDS
 
-local TRIGGER_PREFIXES: { [TriggerCondition]: string } = {
-	OnEnemyKilled = "Exterminateur",
-	OnDamageDealt = "Percuteur",
-	OnDamageTaken = "Riposte",
-	OnHeal = "Régénérateur",
-	OnMove = "Cinétique",
-	OnStandStill = "Bunker",
-	OnCritHit = "Précision",
-	OnLevelUp = "Évolution",
-	OnOverdrive = "Surtension",
-	OnGainXP = "Moissonneur",
+-- Trigger rarity/frequency multipliers from RewardManager.cs
+local TRIGGER_MULTIPLIERS: { [TriggerCondition]: number } = {
+	OnLevelUp = 6.0,
+	OnWaveStart = 10.0,
+	OnEnemyKilled = 0.2,
+	OnWeaponFire = 0.01,
+	OnDamageTaken = 5.0,
+	OnHeal = 1.0,
+	OnStandStill = 5.0,
+	OnCritHit = 1.0,
+	OnMove = 0.001,
+	OnGainXP = 0.1,
+	OnOverdrive = 5.0,
+	OnDamageDealt = 0.1,
 }
 
-local EFFECT_SUFFIXES: { [PassiveEffect]: { name: string, iconFile: string } } = {
-	Heal = { name = "de Réparation", iconFile = "CSFSimpleSkill3_C_256_01.png" },
-	GainMaxHP = { name = "de Vitalité", iconFile = "CSFSimpleSkill3_C_256_01.png" },
-	GainStatDamage = { name = "de Puissance", iconFile = "CSFSimpleSkill3_C_256_02.png" },
-	GainStatSpeed = { name = "de Vélocité", iconFile = "CSFSimpleSkill3_C_256_04.png" },
-	GainStatFireRate = { name = "de Cadence", iconFile = "CSFSimpleSkill3_C_256_03.png" },
-	GainCritChance = { name = "Létal", iconFile = "CSFSimpleSkill3_C_256_06.png" },
-	GainStatArmor = { name = "de Blindage", iconFile = "CSFSimpleSkill3_C_256_05.png" },
-	GainLifeSteal = { name = "Vampirique", iconFile = "CSFSimpleSkill3_C_256_09.png" },
-	ChargeOverdrive = { name = "Nucléaire", iconFile = "CSFSimpleSkill3_C_256_41.png" },
-	GainXP = { name = "d'Optimisation", iconFile = "CSFSimpleSkill3_C_256_07.png" },
+-- Base consequence powers from RewardManager.cs
+local EFFECT_BASES: { [PassiveEffect]: number } = {
+	Heal = 2.0,
+	GainMaxHP = 0.5,
+	GainStatDamage = 0.02,     -- +2% per unit
+	GainStatSpeed = 0.10,      -- +0.1 speed
+	GainStatFireRate = 0.02,   -- +2% fire rate
+	GainCritChance = 1.0,      -- +1% crit
+	GainStatArmor = 1.0,       -- +1 armor
+	GainLifeSteal = 0.005,     -- +0.5% life steal
+	ChargeOverdrive = 5.0,     -- +5% overdrive
+	GainXP = 2.0,              -- +2 XP
 }
 
-function PassivesData.GenerateProceduralPassive(seed: number): PassiveDefinition
-	local rng = Random.new(seed)
-	local triggers: { TriggerCondition } = {
-		"OnEnemyKilled", "OnDamageDealt", "OnDamageTaken", "OnMove", "OnStandStill", "OnCritHit", "OnGainXP",
-	}
-	local effects: { PassiveEffect } = {
-		"Heal", "GainMaxHP", "GainStatDamage", "GainStatSpeed", "GainStatFireRate", "GainCritChance", "GainStatArmor", "ChargeOverdrive",
-	}
+local EFFECT_ICONS: { [PassiveEffect]: string } = {
+	Heal = "rbxassetid://10709791480",
+	GainMaxHP = "rbxassetid://10709791557",
+	GainStatDamage = "rbxassetid://10709791334",
+	GainStatSpeed = "rbxassetid://10709791667",
+	GainStatFireRate = "rbxassetid://10709791281",
+	GainCritChance = "rbxassetid://10709791223",
+	GainStatArmor = "rbxassetid://10709791612",
+	GainLifeSteal = "rbxassetid://10709791480",
+	ChargeOverdrive = "rbxassetid://10709791130",
+	GainXP = "rbxassetid://10709791054",
+}
 
-	local chosenTrigger = triggers[rng:NextInteger(1, #triggers)]
-	local chosenEffect = effects[rng:NextInteger(1, #effects)]
+local EFFECT_ICON_FILES: { [PassiveEffect]: string } = {
+	Heal = "CSFSimpleSkill3_C_256_01.png",
+	GainMaxHP = "CSFSimpleSkill3_C_256_01.png",
+	GainStatDamage = "CSFSimpleSkill3_C_256_02.png",
+	GainStatSpeed = "CSFSimpleSkill3_C_256_04.png",
+	GainStatFireRate = "CSFSimpleSkill3_C_256_03.png",
+	GainCritChance = "CSFSimpleSkill3_C_256_06.png",
+	GainStatArmor = "CSFSimpleSkill3_C_256_05.png",
+	GainLifeSteal = "CSFSimpleSkill3_C_256_09.png",
+	ChargeOverdrive = "CSFSimpleSkill3_C_256_41.png",
+	GainXP = "CSFSimpleSkill3_C_256_07.png",
+}
 
-	local tInfo = PassivesData.TRIGGER_INFO[chosenTrigger]
-	local eInfo = PassivesData.EFFECT_INFO[chosenEffect]
+function PassivesData.CalculateDynamicPassiveValue(trigger: TriggerCondition, effect: PassiveEffect): number
+	local tMult = TRIGGER_MULTIPLIERS[trigger] or 1.0
+	local eBase = EFFECT_BASES[effect] or 1.0
+	return tMult * eBase
+end
 
-	local threshold = tInfo.baseThreshold
-	local power = eInfo.basePower
+function PassivesData.CreateDynamicPassive(trigger: TriggerCondition, effect: PassiveEffect): PassiveDefinition
+	local val = PassivesData.CalculateDynamicPassiveValue(trigger, effect)
+	local tName = TRIGGER_LABELS[trigger] or trigger
+	local eName = EFFECT_LABELS[effect] or effect
 
-	local triggerText = string.format(tInfo.label, threshold)
-	local effectText: string
-	if chosenEffect == "GainStatDamage" or chosenEffect == "GainStatFireRate" then
-		effectText = string.format(eInfo.label, power * 100)
-	elseif chosenEffect == "GainLifeSteal" then
-		effectText = string.format(eInfo.label, power * 100)
+	local valFormatted: string
+	if effect == "GainStatDamage" or effect == "GainStatFireRate" or effect == "GainLifeSteal" then
+		valFormatted = string.format("+%.1f%%", val * 100)
 	else
-		effectText = string.format(eInfo.label, power)
+		valFormatted = string.format("+%.1f", val)
 	end
 
-	local desc = triggerText .. " ➔ " .. effectText
-
-	local prefix = TRIGGER_PREFIXES[chosenTrigger] or "Module"
-	local effData = EFFECT_SUFFIXES[chosenEffect] or { name = "de Réaction", iconFile = "CSFSimpleSkill3_C_256_41.png" }
-	local fullName = string.format("Module %s %s", prefix, effData.name)
-
 	return {
-		id = "ProcPassive_" .. tostring(seed),
-		name = fullName,
-		description = desc,
-		trigger = chosenTrigger,
-		effect = chosenEffect,
-		threshold = threshold,
-		effectPower = power,
-		icon = "rbxassetid://10709791437",
-		iconFile = effData.iconFile,
+		id = string.format("Dyn_%s_%s", trigger, effect),
+		name = string.format("%s\n▼\n%s", tName, eName),
+		description = string.format("(%s)", valFormatted),
+		trigger = trigger,
+		effect = effect,
+		threshold = TRIGGER_THRESHOLDS[trigger] or 5,
+		effectPower = val,
+		icon = EFFECT_ICONS[effect] or "rbxassetid://10709791437",
+		iconFile = EFFECT_ICON_FILES[effect] or "CSFSimpleSkill3_C_256_08.png",
 	}
 end
+
+-- Default base unlock pools matching Unity SampleScene.unity freeUnlocks
+PassivesData.BASE_UNLOCKED_TRIGGERS = {
+	"OnEnemyKilled", "OnDamageDealt", "OnMove", "OnWeaponFire", "OnDamageTaken",
+}
+
+PassivesData.BASE_UNLOCKED_EFFECTS = {
+	"Heal", "GainStatDamage", "ChargeOverdrive", "GainMaxHP", "GainStatSpeed",
+}
 
 return PassivesData

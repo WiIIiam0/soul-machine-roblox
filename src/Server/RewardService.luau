@@ -201,35 +201,48 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		table.insert(cards, chosen)
 	end
 
-	-- 3. PASSIVE POOL (Faithful to RewardManager.cs & PassiveManager.cs)
+	-- 3. PASSIVE POOL (Combinatorial System: Trigger x Effect matching Unity RewardManager.cs lines 220-275)
 	local equippedPassives = PassiveService.GetPlayerPassives(player)
 	local numPassives = #equippedPassives
 	local canOfferPassive = numPassives < maxPassiveSlots
 
 	local possiblePassiveCards: { RewardCard } = {}
 	if canOfferPassive then
-		for _, p in ipairs(PassivesData.PREMADE_PASSIVES) do
-			if MetaProgressionData.IsPassiveUnlocked(meta.totalXP, p.id) then
+		local availableTriggers: { PassivesData.TriggerCondition } = { "OnEnemyKilled", "OnDamageDealt", "OnMove", "OnWeaponFire", "OnDamageTaken" }
+		if meta.totalXP >= 28 then table.insert(availableTriggers, "OnCritHit") end
+		if meta.totalXP >= 72 then table.insert(availableTriggers, "OnWaveStart") end
+		if meta.totalXP >= 217 then table.insert(availableTriggers, "OnOverdrive") end
+		if meta.totalXP >= 522 then table.insert(availableTriggers, "OnLevelUp") end
+
+		local availableEffects: { PassivesData.PassiveEffect } = { "Heal", "GainStatDamage", "ChargeOverdrive", "GainMaxHP", "GainStatSpeed" }
+		if meta.totalXP >= 13 then table.insert(availableEffects, "GainStatArmor") end
+		if meta.totalXP >= 85 then table.insert(availableEffects, "GainCritChance") end
+		if meta.totalXP >= 187 then table.insert(availableEffects, "GainLifeSteal") end
+
+		for _, t in ipairs(availableTriggers) do
+			for _, e in ipairs(availableEffects) do
 				local alreadyOwned = false
 				for _, eq in ipairs(equippedPassives) do
-					if eq.id == p.id then
+					if eq.trigger == t and eq.effect == e then
 						alreadyOwned = true
 						break
 					end
 				end
+
 				if not alreadyOwned then
+					local dynamicDef = PassivesData.CreateDynamicPassive(t, e)
 					table.insert(possiblePassiveCards, {
-						id = "Passive_" .. p.id,
+						id = dynamicDef.id,
 						category = "PASSIVE",
-						title = p.name,
-						subtitle = "MODULE PASSIF RÉACTIF",
-						description = p.description,
-						icon = p.icon,
-						iconFile = p.iconFile,
+						title = dynamicDef.name,
+						subtitle = "PASSIF SYSTÉMIQUE",
+						description = dynamicDef.description,
+						icon = dynamicDef.icon,
+						iconFile = dynamicDef.iconFile,
 						tag = "[ PASSIF ]",
-						glyph = getPassiveGlyph(p),
+						glyph = string.format("[%s ➔ %s]", t, e),
 						rarityColor = Color3.fromRGB(220, 80, 255),
-						passiveDef = p,
+						passiveDef = dynamicDef,
 					})
 				end
 			end

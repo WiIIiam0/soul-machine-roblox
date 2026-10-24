@@ -166,6 +166,16 @@ GameEvents.OnStandStill:Connect(function(player: Player, duration: number)
 	feedTrigger(player, "OnStandStill", duration)
 end)
 
+GameEvents.OnWeaponFired:Connect(function(player: Player, _weaponId: string)
+	feedTrigger(player, "OnWeaponFire", 1)
+end)
+
+GameEvents.OnWaveStarted:Connect(function(_waveNumber: number)
+	for _, p in ipairs(Players:GetPlayers()) do
+		feedTrigger(p, "OnWaveStart", 1)
+	end
+end)
+
 -- Track physical mecha movement and immobility to feed OnMove and OnStandStill passives
 RunService.Heartbeat:Connect(function(dt: number)
 	for player, _ in pairs(playerPassiveStates) do
