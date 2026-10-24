@@ -55,6 +55,22 @@ function WeaponService.AddOrUpgradeWeapon(player: Player, weaponId: string): boo
 		return false -- Maxed out
 	end
 
+	-- Check maximum weapon slots for new weapons
+	if currentRank == 0 and weaponId ~= "StarterGun" then
+		local MetaProgressionService = require(script.Parent.MetaProgressionService)
+		local meta = MetaProgressionService.GetPlayerMeta(player)
+		local numWeapons = 0
+		for w, _ in pairs(state.weapons) do
+			if w ~= "StarterGun" then
+				numWeapons += 1
+			end
+		end
+		if numWeapons >= meta.weaponSlots then
+			warn(string.format("[WeaponService] Player %s has reached maximum weapon slots (%d)", player.Name, meta.weaponSlots))
+			return false
+		end
+	end
+
 	-- RULE: When unlocking the first real weapon (not StarterGun), remove StarterGun!
 	if weaponId ~= "StarterGun" and state.weapons["StarterGun"] ~= nil then
 		state.weapons["StarterGun"] = nil

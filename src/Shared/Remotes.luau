@@ -13,6 +13,9 @@ local REMOTE_EVENT_NAMES = {
 	"TriggerOverdrive",      -- Client -> Server: player activated Overdrive
 	"FloatingText",          -- Server -> Client: 3D damage / crit / burn text
 	"VFXEvent",              -- Server -> Client: explosions, muzzle flashes, beams
+	"MetaSync",              -- Server -> Client: GlobalLevel, GlobalXP, XPToNextLevel, WeaponSlots, PassiveSlots, UnlockedWeapons, UnlockedPassives
+	"GlobalLevelUp",         -- Server -> Client: new global level, unlock notification
+	"RestartRun",            -- Client -> Server: restart after game over
 }
 
 local Remotes = {}

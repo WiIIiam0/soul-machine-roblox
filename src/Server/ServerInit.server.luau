@@ -20,6 +20,7 @@ local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
 local WeaponService = require(script.Parent.WeaponService)
 local XPService = require(script.Parent.XPService)
 local PassiveService = require(script.Parent.PassiveService)
+local MetaProgressionService = require(script.Parent.MetaProgressionService)
 local EnemyDirector = require(script.Parent.EnemyDirector)
 
 print("[SoulMachine / BrotatoRoblox] Initializing Server Systems...")
@@ -29,6 +30,7 @@ ArenaBuilder.BuildArena()
 
 -- 3. Handle Player Setup
 local function setupPlayer(player: Player)
+	MetaProgressionService.InitPlayer(player)
 	PlayerStatsManager.InitPlayer(player)
 	WeaponService.InitPlayer(player)
 	XPService.InitPlayer(player)
@@ -61,6 +63,17 @@ for _, p in ipairs(Players:GetPlayers()) do
 	setupPlayer(p)
 end
 Players.PlayerAdded:Connect(setupPlayer)
+
+-- Handle Run Restart on Player Death / Game Over
+Remotes.GetEvent("RestartRun").OnServerEvent:Connect(function(player: Player)
+	print(string.format("[ServerInit] Player %s requested run restart. Resetting session...", player.Name))
+	PlayerStatsManager.InitPlayer(player)
+	WeaponService.InitPlayer(player)
+	XPService.InitPlayer(player)
+	PassiveService.InitPlayer(player)
+	MetaProgressionService.SyncMeta(player)
+	player:LoadCharacter()
+end)
 
 -- 4. Start Enemy Director
 EnemyDirector.Start()

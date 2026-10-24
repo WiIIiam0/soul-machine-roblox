@@ -243,6 +243,7 @@ function PlayerStatsManager.SyncToClient(player: Player)
 		currentOverdrive = data.currentOverdrive,
 		maxOverdrive = data.maxOverdrive,
 		isOverdriveActive = data.isOverdriveActive,
+		isDead = data.isDead,
 		stats = data.currentStats,
 	})
 end

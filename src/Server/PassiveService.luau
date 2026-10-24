@@ -44,6 +44,13 @@ function PassiveService.AddPassive(player: Player, passive: PassivesData.Passive
 	local state = playerPassiveStates[player]
 	if not state then return end
 
+	local MetaProgressionService = require(script.Parent.MetaProgressionService)
+	local meta = MetaProgressionService.GetPlayerMeta(player)
+	if #state.passives >= meta.passiveSlots then
+		warn(string.format("[PassiveService] Player %s has reached maximum passive slots (%d)", player.Name, meta.passiveSlots))
+		return
+	end
+
 	table.insert(state.passives, passive)
 	state.currentThresholds[passive.id] = passive.threshold
 

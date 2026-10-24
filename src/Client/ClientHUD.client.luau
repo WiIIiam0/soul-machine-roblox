@@ -1,11 +1,12 @@
 --!strict
--- ClientHUD.client.luau: Faithful Cyberpunk HUD, 3-Row Inventory, Damage Flash, and Level Up Modal with Countdown
+-- ClientHUD.client.luau: Faithful Cyberpunk HUD with Responsive UIScale, 3-Row Inventory, Meta-Progression, and Level-Up Cards
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -14,13 +15,46 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local WeaponsData = require(Shared:WaitForChild("WeaponsData"))
 local StatTypes = require(Shared:WaitForChild("StatTypes"))
+local MetaProgressionData = require(Shared:WaitForChild("MetaProgressionData"))
 
 -- Create Main ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SoulMachineHUD"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.IgnoreGuiInset = true
 screenGui.Parent = playerGui
+
+-- --- MASTER RESPONSIVE SCALING ENGINE (UIScale) ---
+local masterScale = Instance.new("UIScale")
+masterScale.Name = "MasterScale"
+masterScale.Parent = screenGui
+
+local function updateResponsiveScale()
+	local cam = Workspace.CurrentCamera
+	if not cam then return end
+	local vp = cam.ViewportSize
+	if vp.X <= 0 or vp.Y <= 0 then return end
+
+	-- Base reference resolution: 1366 x 768
+	local scaleX = vp.X / 1366
+	local scaleY = vp.Y / 768
+	local factor = math.clamp(math.min(scaleX, scaleY), 0.55, 1.35)
+	masterScale.Scale = factor
+end
+
+local camera = Workspace.CurrentCamera
+if camera then
+	camera:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
+	updateResponsiveScale()
+end
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	local newCam = Workspace.CurrentCamera
+	if newCam then
+		newCam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveScale)
+		updateResponsiveScale()
+	end
+end)
 
 -- --- 1. FULLSCREEN DAMAGE FLASH (Vignette) ---
 local damageFlash = Instance.new("Frame")
@@ -40,11 +74,12 @@ local function triggerDamageFlash()
 	tw:Play()
 end
 
--- --- 2. TOP BAR: XP & WAVE TRACKER ---
+-- --- 2. TOP-CENTER: XP & WAVE TRACKER (In-Run) ---
 local topBarContainer = Instance.new("Frame")
 topBarContainer.Name = "TopBarContainer"
-topBarContainer.Size = UDim2.new(0, 520, 0, 48)
-topBarContainer.Position = UDim2.new(0.5, -260, 0, 16)
+topBarContainer.Size = UDim2.new(0, 480, 0, 44)
+topBarContainer.AnchorPoint = Vector2.new(0.5, 0)
+topBarContainer.Position = UDim2.new(0.5, 0, 0, 16)
 topBarContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
 topBarContainer.BackgroundTransparency = 0.25
 topBarContainer.BorderSizePixel = 0
@@ -60,22 +95,22 @@ topBarStroke.Thickness = 1.5
 topBarStroke.Transparency = 0.3
 topBarStroke.Parent = topBarContainer
 
--- Level Badge
+-- Level Badge (In-run)
 local levelBadge = Instance.new("TextLabel")
 levelBadge.Name = "LevelBadge"
-levelBadge.Size = UDim2.new(0, 80, 1, 0)
+levelBadge.Size = UDim2.new(0, 75, 1, 0)
 levelBadge.BackgroundTransparency = 1
 levelBadge.TextColor3 = Color3.fromRGB(0, 240, 255)
 levelBadge.Font = Enum.Font.GothamBlack
-levelBadge.TextSize = 14
+levelBadge.TextSize = 13
 levelBadge.Text = "NIV. 1"
 levelBadge.Parent = topBarContainer
 
--- XP Bar
+-- XP Bar (In-run)
 local xpBarBg = Instance.new("Frame")
 xpBarBg.Name = "XPBarBg"
-xpBarBg.Size = UDim2.new(1, -260, 0, 14)
-xpBarBg.Position = UDim2.new(0, 85, 0.5, -7)
+xpBarBg.Size = UDim2.new(1, -250, 0, 14)
+xpBarBg.Position = UDim2.new(0, 80, 0.5, -7)
 xpBarBg.BackgroundColor3 = Color3.fromRGB(8, 12, 18)
 xpBarBg.BorderSizePixel = 0
 xpBarBg.Parent = topBarContainer
@@ -108,20 +143,97 @@ xpText.Parent = xpBarBg
 -- Wave & Enemies Tracker
 local waveInfoLabel = Instance.new("TextLabel")
 waveInfoLabel.Name = "WaveInfoLabel"
-waveInfoLabel.Size = UDim2.new(0, 160, 1, 0)
-waveInfoLabel.Position = UDim2.new(1, -165, 0, 0)
+waveInfoLabel.Size = UDim2.new(0, 165, 1, 0)
+waveInfoLabel.Position = UDim2.new(1, -170, 0, 0)
 waveInfoLabel.BackgroundTransparency = 1
 waveInfoLabel.TextColor3 = Color3.fromRGB(255, 210, 50)
 waveInfoLabel.Font = Enum.Font.GothamBlack
-waveInfoLabel.TextSize = 12
+waveInfoLabel.TextSize = 11
 waveInfoLabel.Text = "VAGUE 1 (40s) | 0 FOES"
 waveInfoLabel.Parent = topBarContainer
 
--- --- 3. TOP-LEFT: 3-ROW INVENTORY (Fidèle à l'original: ARMES, PASSIFS, STATS) ---
+-- --- 2B. TOP-CENTER: META-PROGRESSION TRACKER (Compte Global) ---
+local metaBarContainer = Instance.new("Frame")
+metaBarContainer.Name = "MetaBarContainer"
+metaBarContainer.Size = UDim2.new(0, 480, 0, 24)
+metaBarContainer.AnchorPoint = Vector2.new(0.5, 0)
+metaBarContainer.Position = UDim2.new(0.5, 0, 0, 66)
+metaBarContainer.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
+metaBarContainer.BackgroundTransparency = 0.35
+metaBarContainer.BorderSizePixel = 0
+metaBarContainer.Parent = screenGui
+
+local metaCorner = Instance.new("UICorner")
+metaCorner.CornerRadius = UDim.new(0, 6)
+metaCorner.Parent = metaBarContainer
+
+local metaStroke = Instance.new("UIStroke")
+metaStroke.Color = Color3.fromRGB(255, 200, 40)
+metaStroke.Thickness = 1.2
+metaStroke.Transparency = 0.5
+metaStroke.Parent = metaBarContainer
+
+local metaLevelLabel = Instance.new("TextLabel")
+metaLevelLabel.Name = "MetaLevelLabel"
+metaLevelLabel.Size = UDim2.new(0, 125, 1, 0)
+metaLevelLabel.Position = UDim2.new(0, 8, 0, 0)
+metaLevelLabel.BackgroundTransparency = 1
+metaLevelLabel.TextColor3 = Color3.fromRGB(255, 215, 60)
+metaLevelLabel.Font = Enum.Font.GothamBlack
+metaLevelLabel.TextSize = 10
+metaLevelLabel.TextXAlignment = Enum.TextXAlignment.Left
+metaLevelLabel.Text = "★ GLOBAL : NIV. 1"
+metaLevelLabel.Parent = metaBarContainer
+
+local metaXPBarBg = Instance.new("Frame")
+metaXPBarBg.Name = "MetaXPBarBg"
+metaXPBarBg.Size = UDim2.new(1, -255, 0, 10)
+metaXPBarBg.Position = UDim2.new(0, 130, 0.5, -5)
+metaXPBarBg.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
+metaXPBarBg.BorderSizePixel = 0
+metaXPBarBg.Parent = metaBarContainer
+
+local metaXPCorner = Instance.new("UICorner")
+metaXPCorner.CornerRadius = UDim.new(0.5, 0)
+metaXPCorner.Parent = metaXPBarBg
+
+local metaXPBarFill = Instance.new("Frame")
+metaXPBarFill.Name = "Fill"
+metaXPBarFill.Size = UDim2.new(0, 0, 1, 0)
+metaXPBarFill.BackgroundColor3 = Color3.fromRGB(255, 180, 20)
+metaXPBarFill.BorderSizePixel = 0
+metaXPBarFill.Parent = metaXPBarBg
+
+local metaXPFillCorner = Instance.new("UICorner")
+metaXPFillCorner.CornerRadius = UDim.new(0.5, 0)
+metaXPFillCorner.Parent = metaXPBarFill
+
+local metaXPText = Instance.new("TextLabel")
+metaXPText.Name = "MetaXPText"
+metaXPText.Size = UDim2.new(1, 0, 1, 0)
+metaXPText.BackgroundTransparency = 1
+metaXPText.TextColor3 = Color3.fromRGB(255, 255, 255)
+metaXPText.Font = Enum.Font.GothamBold
+metaXPText.TextSize = 8
+metaXPText.Text = "0 / 80 EXP"
+metaXPText.Parent = metaXPBarBg
+
+local metaSlotsLabel = Instance.new("TextLabel")
+metaSlotsLabel.Name = "MetaSlotsLabel"
+metaSlotsLabel.Size = UDim2.new(0, 120, 1, 0)
+metaSlotsLabel.Position = UDim2.new(1, -125, 0, 0)
+metaSlotsLabel.BackgroundTransparency = 1
+metaSlotsLabel.TextColor3 = Color3.fromRGB(180, 220, 255)
+metaSlotsLabel.Font = Enum.Font.GothamBold
+metaSlotsLabel.TextSize = 9
+metaSlotsLabel.Text = "SLOTS : 4/6 ARM | 4/6 PAS"
+metaSlotsLabel.Parent = metaBarContainer
+
+-- --- 3. TOP-LEFT: 3-ROW INVENTORY (ARMES, PASSIFS, STATS avec Emplacements Verrouillés) ---
 local invContainer = Instance.new("Frame")
 invContainer.Name = "InventoryContainer"
-invContainer.Size = UDim2.new(0, 310, 0, 128)
-invContainer.Position = UDim2.new(0, 20, 0, 20)
+invContainer.Size = UDim2.new(0, 310, 0, 134)
+invContainer.Position = UDim2.new(0, 18, 0, 16)
 invContainer.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
 invContainer.BackgroundTransparency = 0.25
 invContainer.BorderSizePixel = 0
@@ -151,7 +263,7 @@ local function createInvRow(name: string, labelText: string, labelColor: Color3,
 	label.BackgroundTransparency = 1
 	label.TextColor3 = labelColor
 	label.Font = Enum.Font.GothamBold
-	label.TextSize = 12
+	label.TextSize = 11
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = labelText
 	label.Parent = row
@@ -167,9 +279,10 @@ local function createInvRow(name: string, labelText: string, labelColor: Color3,
 end
 
 local _, weaponSlots = createInvRow("Weapons", "ARMES", Color3.fromRGB(255, 100, 100), 8)
-local _, passiveSlots = createInvRow("Passives", "PASSIFS", Color3.fromRGB(200, 150, 255), 44)
-local _, statSlots = createInvRow("Stats", "STATS", Color3.fromRGB(100, 255, 150), 80)
+local _, passiveSlots = createInvRow("Passives", "PASSIFS", Color3.fromRGB(200, 150, 255), 48)
+local _, statSlots = createInvRow("Stats", "STATS", Color3.fromRGB(100, 255, 150), 88)
 
+-- Texture resolution cache
 local textureCache: { [string]: string } = {}
 
 local function extractTextureString(inst: Instance): string?
@@ -202,7 +315,6 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 
 	local numMatch = string.match(cleanLower, "%d+_%d+$") or string.match(cleanLower, "%d+$")
 
-	-- 1. Direct fast lookup in common containers
 	local candidates = {
 		ReplicatedStorage:FindFirstChild("Icons"),
 		ReplicatedStorage:FindFirstChild("Assets"),
@@ -220,53 +332,34 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 				local tex = extractTextureString(found)
 				if tex then
 					textureCache[cleanLower] = tex
-					print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, found:GetFullName()))
 					return tex
 				end
 			end
 		end
 	end
 
-	-- 2. Scan ReplicatedStorage descendants
 	for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
 		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
-				print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, desc:GetFullName()))
 				return tex
 			end
 		end
 	end
 
-	-- 3. Scan Workspace descendants
 	for _, desc in ipairs(Workspace:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
 		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
-				print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, desc:GetFullName()))
 				return tex
 			end
 		end
 	end
 
-	-- 4. Check playerGui descendants
-	for _, desc in ipairs(playerGui:GetDescendants()) do
-		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
-		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
-			local tex = extractTextureString(desc)
-			if tex then
-				textureCache[cleanLower] = tex
-				print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, desc:GetFullName()))
-				return tex
-			end
-		end
-	end
-
-	-- Ignore any bogus fallback placeholders (rbxassetid://10709791...)
 	if rawIcon and rawIcon ~= "" and not string.find(rawIcon, "rbxassetid://10709791") then
 		return rawIcon
 	end
@@ -274,10 +367,25 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 	return nil
 end
 
-local function populateRowSlots(container: Frame, count: number, borderColor: Color3, items: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } })
+local cachedMaxWeaponSlots = 4
+local cachedMaxPassiveSlots = 4
+local cachedLastWeaponList: { any } = {}
+local cachedLastPassiveList: { any } = {}
+local cachedLastStatList: { any } = {}
+
+local function populateRowSlots(
+	container: Frame,
+	count: number,
+	borderColor: Color3,
+	items: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } },
+	unlockedSlots: number?,
+	unlockLevelMap: { [number]: number }?
+)
 	for _, child in ipairs(container:GetChildren()) do
 		if child:IsA("Frame") then child:Destroy() end
 	end
+
+	local maxUnlocked = unlockedSlots or count
 
 	for i = 1, count do
 		local box = Instance.new("Frame")
@@ -296,60 +404,85 @@ local function populateRowSlots(container: Frame, count: number, borderColor: Co
 		bStroke.Thickness = 1.2
 		bStroke.Parent = box
 
-		local item = items[i]
-		if item then
-			bStroke.Color = borderColor
-			bStroke.Transparency = 0.2
-			box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
+		if i > maxUnlocked then
+			-- LOCKED SLOT
+			box.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
+			bStroke.Color = Color3.fromRGB(90, 40, 50)
+			bStroke.Transparency = 0.5
 
-			-- Sci-Fi Technical Designation
-			local tagLabel = Instance.new("TextLabel")
-			tagLabel.Name = "Tag"
-			tagLabel.Size = UDim2.new(1, -2, 1, -2)
-			tagLabel.Position = UDim2.new(0, 1, 0, 1)
-			tagLabel.BackgroundTransparency = 1
-			tagLabel.TextColor3 = borderColor
-			tagLabel.Font = Enum.Font.GothamBlack
-			tagLabel.TextSize = 8
-			tagLabel.Text = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
-			tagLabel.ZIndex = 1
-			tagLabel.Parent = box
+			local reqLvl = (unlockLevelMap and unlockLevelMap[i]) or (i - 1)
+			local lockIcon = Instance.new("TextLabel")
+			lockIcon.Name = "LockIcon"
+			lockIcon.Size = UDim2.new(1, 0, 0.55, 0)
+			lockIcon.Position = UDim2.new(0, 0, 0, 1)
+			lockIcon.BackgroundTransparency = 1
+			lockIcon.Text = "🔒"
+			lockIcon.TextSize = 10
+			lockIcon.Parent = box
 
-			-- Resolve texture from ReplicatedStorage.Icons (or valid asset ID)
-			local resolved = resolveTexture(item.iconFile, item.icon)
-			if resolved and resolved ~= "" then
-				local iconImg = Instance.new("ImageLabel")
-				iconImg.Size = UDim2.new(1, -4, 1, -4)
-				iconImg.Position = UDim2.new(0, 2, 0, 2)
-				iconImg.BackgroundTransparency = 1
-				iconImg.Image = resolved
-				iconImg.ZIndex = 2
-				iconImg.Parent = box
-				tagLabel.Visible = false
-			end
-
-			-- Rank text badge in bottom-right corner
-			if item.rank and item.rank > 0 then
-				local rankBadge = Instance.new("TextLabel")
-				rankBadge.Name = "RankBadge"
-				rankBadge.Size = UDim2.new(0, 13, 0, 11)
-				rankBadge.Position = UDim2.new(1, -13, 1, -11)
-				rankBadge.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
-				rankBadge.BackgroundTransparency = 0.2
-				rankBadge.TextColor3 = borderColor
-				rankBadge.Font = Enum.Font.GothamBlack
-				rankBadge.TextSize = 8
-				rankBadge.Text = tostring(item.rank)
-				rankBadge.ZIndex = 3
-				rankBadge.Parent = box
-
-				local rCorner = Instance.new("UICorner")
-				rCorner.CornerRadius = UDim.new(0, 3)
-				rCorner.Parent = rankBadge
-			end
+			local lvlReqLabel = Instance.new("TextLabel")
+			lvlReqLabel.Name = "LvlReq"
+			lvlReqLabel.Size = UDim2.new(1, 0, 0.45, 0)
+			lvlReqLabel.Position = UDim2.new(0, 0, 0.55, -2)
+			lvlReqLabel.BackgroundTransparency = 1
+			lvlReqLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
+			lvlReqLabel.Font = Enum.Font.GothamBold
+			lvlReqLabel.TextSize = 7
+			lvlReqLabel.Text = "NIV." .. reqLvl
+			lvlReqLabel.Parent = box
 		else
-			bStroke.Color = Color3.fromRGB(40, 50, 70)
-			bStroke.Transparency = 0.7
+			local item = items[i]
+			if item then
+				bStroke.Color = borderColor
+				bStroke.Transparency = 0.2
+				box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
+
+				local tagLabel = Instance.new("TextLabel")
+				tagLabel.Name = "Tag"
+				tagLabel.Size = UDim2.new(1, -2, 1, -2)
+				tagLabel.Position = UDim2.new(0, 1, 0, 1)
+				tagLabel.BackgroundTransparency = 1
+				tagLabel.TextColor3 = borderColor
+				tagLabel.Font = Enum.Font.GothamBlack
+				tagLabel.TextSize = 8
+				tagLabel.Text = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
+				tagLabel.ZIndex = 1
+				tagLabel.Parent = box
+
+				local resolved = resolveTexture(item.iconFile, item.icon)
+				if resolved and resolved ~= "" then
+					local iconImg = Instance.new("ImageLabel")
+					iconImg.Size = UDim2.new(1, -4, 1, -4)
+					iconImg.Position = UDim2.new(0, 2, 0, 2)
+					iconImg.BackgroundTransparency = 1
+					iconImg.Image = resolved
+					iconImg.ZIndex = 2
+					iconImg.Parent = box
+					tagLabel.Visible = false
+				end
+
+				if item.rank and item.rank > 0 then
+					local rankBadge = Instance.new("TextLabel")
+					rankBadge.Name = "RankBadge"
+					rankBadge.Size = UDim2.new(0, 13, 0, 11)
+					rankBadge.Position = UDim2.new(1, -13, 1, -11)
+					rankBadge.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
+					rankBadge.BackgroundTransparency = 0.2
+					rankBadge.TextColor3 = borderColor
+					rankBadge.Font = Enum.Font.GothamBlack
+					rankBadge.TextSize = 8
+					rankBadge.Text = tostring(item.rank)
+					rankBadge.ZIndex = 3
+					rankBadge.Parent = box
+
+					local rCorner = Instance.new("UICorner")
+					rCorner.CornerRadius = UDim.new(0, 3)
+					rCorner.Parent = rankBadge
+				end
+			else
+				bStroke.Color = Color3.fromRGB(40, 50, 70)
+				bStroke.Transparency = 0.7
+			end
 		end
 	end
 end
@@ -423,7 +556,8 @@ armorText.Parent = vitalsContainer
 local odContainer = Instance.new("Frame")
 odContainer.Name = "OverdriveContainer"
 odContainer.Size = UDim2.new(0, 320, 0, 52)
-odContainer.Position = UDim2.new(0.5, -160, 1, -74)
+odContainer.AnchorPoint = Vector2.new(0.5, 0.5)
+odContainer.Position = UDim2.new(0.5, 0, 1, -54)
 odContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 30)
 odContainer.BackgroundTransparency = 0.25
 odContainer.BorderSizePixel = 0
@@ -463,44 +597,46 @@ odBtn.Activated:Connect(function()
 	Remotes.GetEvent("TriggerOverdrive"):FireServer()
 end)
 
--- --- 6. LEVEL UP MODAL AVEC COMPTE À REBOURS (15s) ET DESIGN FIDÈLE ---
+-- --- 6. LEVEL UP MODAL AVEC CENTRAGE RESPONSIVE ET COMPTE À REBOURS ---
 local levelUpModal = Instance.new("Frame")
 levelUpModal.Name = "LevelUpModal"
 levelUpModal.Size = UDim2.new(1, 0, 1, 0)
-levelUpModal.BackgroundColor3 = Color3.fromRGB(10, 15, 30)
+levelUpModal.BackgroundColor3 = Color3.fromRGB(8, 12, 24)
 levelUpModal.BackgroundTransparency = 0.15
 levelUpModal.Visible = false
 levelUpModal.ZIndex = 100
 levelUpModal.Parent = screenGui
 
--- Titre
 local modalTitle = Instance.new("TextLabel")
 modalTitle.Name = "Title"
-modalTitle.Size = UDim2.new(1, 0, 0, 44)
-modalTitle.Position = UDim2.new(0, 0, 0.08, 0)
+modalTitle.Size = UDim2.new(1, 0, 0, 40)
+modalTitle.Position = UDim2.new(0.5, 0, 0, 36)
+modalTitle.AnchorPoint = Vector2.new(0.5, 0)
 modalTitle.BackgroundTransparency = 1
 modalTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 modalTitle.Font = Enum.Font.GothamBlack
-modalTitle.TextSize = 34
+modalTitle.TextSize = 32
 modalTitle.Text = "NIVEAU SUPÉRIEUR"
 modalTitle.Parent = levelUpModal
 
 local subtitleLabel = Instance.new("TextLabel")
 subtitleLabel.Name = "Subtitle"
-subtitleLabel.Size = UDim2.new(1, 0, 0, 24)
-subtitleLabel.Position = UDim2.new(0, 0, 0.14, 0)
+subtitleLabel.Size = UDim2.new(1, 0, 0, 22)
+subtitleLabel.Position = UDim2.new(0.5, 0, 0, 78)
+subtitleLabel.AnchorPoint = Vector2.new(0.5, 0)
 subtitleLabel.BackgroundTransparency = 1
 subtitleLabel.TextColor3 = Color3.fromRGB(150, 220, 255)
 subtitleLabel.Font = Enum.Font.GothamMedium
-subtitleLabel.TextSize = 16
-subtitleLabel.Text = "Choisissez une amélioration"
+subtitleLabel.TextSize = 15
+subtitleLabel.Text = "Choisissez une amélioration pour votre Mécha"
 subtitleLabel.Parent = levelUpModal
 
--- Compte à rebours (15s)
+-- Compte à rebours
 local timerContainer = Instance.new("Frame")
 timerContainer.Name = "TimerContainer"
-timerContainer.Size = UDim2.new(0, 360, 0, 26)
-timerContainer.Position = UDim2.new(0.5, -180, 0.19, 0)
+timerContainer.Size = UDim2.new(0, 340, 0, 24)
+timerContainer.Position = UDim2.new(0.5, 0, 0, 106)
+timerContainer.AnchorPoint = Vector2.new(0.5, 0)
 timerContainer.BackgroundColor3 = Color3.fromRGB(15, 20, 35)
 timerContainer.BorderSizePixel = 0
 timerContainer.Parent = levelUpModal
@@ -534,18 +670,26 @@ timerLabel.Parent = timerContainer
 local cardsHolder = Instance.new("Frame")
 cardsHolder.Name = "CardsHolder"
 cardsHolder.Size = UDim2.new(0, 940, 0, 420)
-cardsHolder.Position = UDim2.new(0.5, -470, 0.5, -170)
+cardsHolder.Position = UDim2.new(0.5, 0, 0.58, 0)
+cardsHolder.AnchorPoint = Vector2.new(0.5, 0.5)
 cardsHolder.BackgroundTransparency = 1
 cardsHolder.Parent = levelUpModal
+
+local cardsLayout = Instance.new("UIListLayout")
+cardsLayout.Name = "CardsLayout"
+cardsLayout.FillDirection = Enum.FillDirection.Horizontal
+cardsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+cardsLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+cardsLayout.Padding = UDim.new(0, 22)
+cardsLayout.Parent = cardsHolder
 
 local countdownRemaining = 15.0
 local countdownActive = false
 
-local function createChoiceCard(index: number, cardData: any, xOffset: number): Frame
+local function createChoiceCard(index: number, cardData: any): Frame
 	local card = Instance.new("Frame")
 	card.Name = "Card_" .. index
 	card.Size = UDim2.new(0, 280, 0, 400)
-	card.Position = UDim2.new(0, xOffset, 0, 0)
 	card.BackgroundColor3 = Color3.fromRGB(20, 30, 50)
 	card.BackgroundTransparency = 0.1
 	card.BorderSizePixel = 0
@@ -560,15 +704,15 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	cStroke.Thickness = 2.5
 	cStroke.Parent = card
 
-	-- Floating Category Badge on top border (-15px)
+	-- Floating Category Badge on top border (-14px)
 	local categoryBadge = Instance.new("TextLabel")
 	categoryBadge.Name = "CategoryBadge"
-	categoryBadge.Size = UDim2.new(0, 120, 0, 28)
-	categoryBadge.Position = UDim2.new(0.5, -60, 0, -14)
+	categoryBadge.Size = UDim2.new(0, 130, 0, 28)
+	categoryBadge.Position = UDim2.new(0.5, -65, 0, -14)
 	categoryBadge.BackgroundColor3 = Color3.fromRGB(10, 20, 30)
 	categoryBadge.TextColor3 = cardData.rarityColor or Color3.fromRGB(255, 255, 255)
 	categoryBadge.Font = Enum.Font.GothamBlack
-	categoryBadge.TextSize = 12
+	categoryBadge.TextSize = 11
 	categoryBadge.Text = cardData.category or "UPGRADE"
 	categoryBadge.Parent = card
 
@@ -589,7 +733,7 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	title.BackgroundTransparency = 1
 	title.TextColor3 = Color3.fromRGB(255, 255, 255)
 	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 17
+	title.TextSize = 16
 	title.TextWrapped = true
 	title.Text = cardData.title
 	title.Parent = card
@@ -613,7 +757,6 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	iStroke.Transparency = 0.3
 	iStroke.Parent = iconBox
 
-	-- Holographic sci-fi technical badge (NO tacky cartoon emojis)
 	local iconBadge = Instance.new("TextLabel")
 	iconBadge.Name = "IconBadge"
 	iconBadge.Size = UDim2.new(1, -8, 1, -8)
@@ -627,7 +770,7 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	iconBadge.ZIndex = 1
 	iconBadge.Parent = iconBox
 
-	-- Check if asset exists in ReplicatedStorage.Icons (Bulk Import folder)
+	-- Resolve real PNG texture
 	local resolvedImage = resolveTexture(cardData.iconFile, cardData.icon)
 	if resolvedImage and resolvedImage ~= "" then
 		local iconImg = Instance.new("ImageLabel")
@@ -642,7 +785,7 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 		iconBadge.Visible = true
 	end
 
-	-- Subtitle (e.g. RANG 1 ➔ 2 or +20% PV)
+	-- Subtitle (e.g. RANG 1 ➔ 2)
 	local subLabel = Instance.new("TextLabel")
 	subLabel.Name = "SubLabel"
 	subLabel.Size = UDim2.new(1, -20, 0, 24)
@@ -701,10 +844,9 @@ Remotes.GetEvent("LevelUpOptions").OnClientEvent:Connect(function(cards: { any }
 		if child:IsA("Frame") then child:Destroy() end
 	end
 
-	local offsets = { 20, 330, 640 }
 	for idx, cardData in ipairs(cards) do
 		if idx <= 3 then
-			createChoiceCard(idx, cardData, offsets[idx])
+			createChoiceCard(idx, cardData)
 		end
 	end
 
@@ -726,16 +868,222 @@ RunService.Heartbeat:Connect(function(dt: number)
 		if countdownRemaining <= 0 then
 			countdownActive = false
 			levelUpModal.Visible = false
-			-- Auto-select first choice
 			Remotes.GetEvent("SelectLevelUpChoice"):FireServer(1)
 		end
 	end
 end)
 
+-- --- 7. NOTIFICATION BANNER: GLOBAL LEVEL UP ---
+local globalLevelUpBanner = Instance.new("Frame")
+globalLevelUpBanner.Name = "GlobalLevelUpBanner"
+globalLevelUpBanner.Size = UDim2.new(0, 560, 0, 88)
+globalLevelUpBanner.Position = UDim2.new(0.5, 0, 0, -110)
+globalLevelUpBanner.AnchorPoint = Vector2.new(0.5, 0)
+globalLevelUpBanner.BackgroundColor3 = Color3.fromRGB(16, 22, 36)
+globalLevelUpBanner.BackgroundTransparency = 0.08
+globalLevelUpBanner.BorderSizePixel = 0
+globalLevelUpBanner.ZIndex = 200
+globalLevelUpBanner.Visible = false
+globalLevelUpBanner.Parent = screenGui
+
+local gbCorner = Instance.new("UICorner")
+gbCorner.CornerRadius = UDim.new(0, 10)
+gbCorner.Parent = globalLevelUpBanner
+
+local gbStroke = Instance.new("UIStroke")
+gbStroke.Color = Color3.fromRGB(255, 215, 50)
+gbStroke.Thickness = 2
+gbStroke.Parent = globalLevelUpBanner
+
+local gbTitle = Instance.new("TextLabel")
+gbTitle.Name = "Title"
+gbTitle.Size = UDim2.new(1, -20, 0, 28)
+gbTitle.Position = UDim2.new(0, 10, 0, 8)
+gbTitle.BackgroundTransparency = 1
+gbTitle.TextColor3 = Color3.fromRGB(255, 225, 70)
+gbTitle.Font = Enum.Font.GothamBlack
+gbTitle.TextSize = 15
+gbTitle.Text = "★ NOUVEAU NIVEAU GLOBAL DE COMPTE ★"
+gbTitle.Parent = globalLevelUpBanner
+
+local gbDesc = Instance.new("TextLabel")
+gbDesc.Name = "Desc"
+gbDesc.Size = UDim2.new(1, -24, 0, 42)
+gbDesc.Position = UDim2.new(0, 12, 0, 36)
+gbDesc.BackgroundTransparency = 1
+gbDesc.TextColor3 = Color3.fromRGB(220, 240, 255)
+gbDesc.Font = Enum.Font.GothamMedium
+gbDesc.TextSize = 12
+gbDesc.TextWrapped = true
+gbDesc.Text = ""
+gbDesc.Parent = globalLevelUpBanner
+
+Remotes.GetEvent("GlobalLevelUp").OnClientEvent:Connect(function(data: any)
+	if not data then return end
+	local info = data.unlockInfo
+	local titleText = string.format("★ NOUVEAU NIVEAU GLOBAL : NIV. %d - %s ★", data.newLevel or 1, (info and info.title) or "Opérateur")
+	local descText = (info and info.description) or "+1 Niveau de compte permanent !"
+
+	gbTitle.Text = titleText
+	gbDesc.Text = descText
+	globalLevelUpBanner.Visible = true
+
+	-- Slide-in animation
+	local slideIn = TweenService:Create(globalLevelUpBanner, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0, 96),
+	})
+	slideIn:Play()
+
+	task.delay(5.5, function()
+		local slideOut = TweenService:Create(globalLevelUpBanner, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Position = UDim2.new(0.5, 0, 0, -110),
+		})
+		slideOut:Play()
+		slideOut.Completed:Connect(function()
+			globalLevelUpBanner.Visible = false
+		end)
+	end)
+end)
+
+-- --- 8. GAME OVER / MISSION SUMMARY MODAL ---
+local gameOverModal = Instance.new("Frame")
+gameOverModal.Name = "GameOverModal"
+gameOverModal.Size = UDim2.new(1, 0, 1, 0)
+gameOverModal.BackgroundColor3 = Color3.fromRGB(8, 10, 18)
+gameOverModal.BackgroundTransparency = 0.15
+gameOverModal.Visible = false
+gameOverModal.ZIndex = 150
+gameOverModal.Parent = screenGui
+
+local goCard = Instance.new("Frame")
+goCard.Name = "SummaryCard"
+goCard.Size = UDim2.new(0, 460, 0, 380)
+goCard.Position = UDim2.new(0.5, 0, 0.5, 0)
+goCard.AnchorPoint = Vector2.new(0.5, 0.5)
+goCard.BackgroundColor3 = Color3.fromRGB(16, 20, 32)
+goCard.BorderSizePixel = 0
+goCard.Parent = gameOverModal
+
+local goCorner = Instance.new("UICorner")
+goCorner.CornerRadius = UDim.new(0, 16)
+goCorner.Parent = goCard
+
+local goStroke = Instance.new("UIStroke")
+goStroke.Color = Color3.fromRGB(255, 60, 70)
+goStroke.Thickness = 2
+goStroke.Parent = goCard
+
+local goTitle = Instance.new("TextLabel")
+goTitle.Name = "Title"
+goTitle.Size = UDim2.new(1, 0, 0, 42)
+goTitle.Position = UDim2.new(0, 0, 0, 20)
+goTitle.BackgroundTransparency = 1
+goTitle.TextColor3 = Color3.fromRGB(255, 60, 70)
+goTitle.Font = Enum.Font.GothamBlack
+goTitle.TextSize = 22
+goTitle.Text = "MISSION TERMINÉE"
+goTitle.Parent = goCard
+
+local goSub = Instance.new("TextLabel")
+goSub.Name = "Sub"
+goSub.Size = UDim2.new(1, 0, 0, 22)
+goSub.Position = UDim2.new(0, 0, 0, 62)
+goSub.BackgroundTransparency = 1
+goSub.TextColor3 = Color3.fromRGB(150, 180, 210)
+goSub.Font = Enum.Font.Gotham
+goSub.TextSize = 13
+goSub.Text = "Votre Mécha a été neutralisé par l'Essaim."
+goSub.Parent = goCard
+
+local goStatsBox = Instance.new("Frame")
+goStatsBox.Name = "StatsBox"
+goStatsBox.Size = UDim2.new(1, -40, 0, 180)
+goStatsBox.Position = UDim2.new(0, 20, 0, 96)
+goStatsBox.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
+goStatsBox.BorderSizePixel = 0
+goStatsBox.Parent = goCard
+
+local goStatsCorner = Instance.new("UICorner")
+goStatsCorner.CornerRadius = UDim.new(0, 8)
+goStatsCorner.Parent = goStatsBox
+
+local goStatsText = Instance.new("TextLabel")
+goStatsText.Name = "StatsText"
+goStatsText.Size = UDim2.new(1, -24, 1, -16)
+goStatsText.Position = UDim2.new(0, 12, 0, 8)
+goStatsText.BackgroundTransparency = 1
+goStatsText.TextColor3 = Color3.fromRGB(220, 240, 255)
+goStatsText.Font = Enum.Font.GothamMedium
+goStatsText.TextSize = 14
+goStatsText.TextXAlignment = Enum.TextXAlignment.Left
+goStatsText.TextYAlignment = Enum.TextYAlignment.Center
+goStatsText.Text = "Initialisation du rapport télémétrique..."
+goStatsText.Parent = goStatsBox
+
+local restartBtn = Instance.new("TextButton")
+restartBtn.Name = "RestartBtn"
+restartBtn.Size = UDim2.new(1, -40, 0, 46)
+restartBtn.Position = UDim2.new(0, 20, 1, -66)
+restartBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 255)
+restartBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
+restartBtn.Font = Enum.Font.GothamBlack
+restartBtn.TextSize = 14
+restartBtn.Text = "RÉAPPARAÎTRE / NOUVELLE MISSION"
+restartBtn.Parent = goCard
+
+local restartCorner = Instance.new("UICorner")
+restartCorner.CornerRadius = UDim.new(0, 8)
+restartCorner.Parent = restartBtn
+
+restartBtn.Activated:Connect(function()
+	gameOverModal.Visible = false
+	Remotes.GetEvent("RestartRun"):FireServer()
+end)
+
+-- --- 9. SYNCHRONISATION DU STATUT RÉSEAU & META-PROGRESSION ---
+local currentSurvivingWave = 1
 local prevHP: number? = nil
 
--- State Sync Listener
+Remotes.GetEvent("MetaSync").OnClientEvent:Connect(function(data: any)
+	if not data then return end
+
+	if data.weaponSlots then
+		cachedMaxWeaponSlots = data.weaponSlots
+	end
+	if data.passiveSlots then
+		cachedMaxPassiveSlots = data.passiveSlots
+	end
+
+	if data.globalLevel then
+		metaLevelLabel.Text = string.format("★ GLOBAL : NIV. %d", data.globalLevel)
+	end
+
+	if data.globalXP ~= nil and data.xpToNextLevel then
+		local ratio = math.clamp(data.globalXP / data.xpToNextLevel, 0, 1)
+		metaXPBarFill.Size = UDim2.new(ratio, 0, 1, 0)
+		metaXPText.Text = string.format("%.0f / %.0f EXP", data.globalXP, data.xpToNextLevel)
+	end
+
+	metaSlotsLabel.Text = string.format("SLOTS : %d/6 ARM | %d/6 PAS", cachedMaxWeaponSlots, cachedMaxPassiveSlots)
+
+	-- Refresh slot renderings with updated unlock boundaries
+	populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), cachedLastWeaponList, cachedMaxWeaponSlots, { [5] = 3, [6] = 5 })
+	populateRowSlots(passiveSlots, 6, Color3.fromRGB(200, 150, 255), cachedLastPassiveList, cachedMaxPassiveSlots, { [5] = 2, [6] = 4 })
+	populateRowSlots(statSlots, 6, Color3.fromRGB(50, 255, 120), cachedLastStatList, 6, nil)
+end)
+
 Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
+	if data.isDead then
+		gameOverModal.Visible = true
+		goStatsText.Text = string.format(
+			"• Vagues tenues : Vague %d\n• Niveau de combat : Niv. %s\n• Emplacements : %d Armes | %d Passifs\n• EXP de compte : Enregistré avec succès !",
+			currentSurvivingWave,
+			levelBadge.Text,
+			cachedMaxWeaponSlots,
+			cachedMaxPassiveSlots
+		)
+	end
+
 	if data.currentHP and data.maxHP then
 		if prevHP ~= nil and data.currentHP < prevHP then
 			triggerDamageFlash()
@@ -745,6 +1093,10 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		local hpRatio = math.clamp(data.currentHP / data.maxHP, 0, 1)
 		hpBarFill.Size = UDim2.new(hpRatio, 0, 1, 0)
 		hpText.Text = string.format("%.0f / %.0f PV", data.currentHP, data.maxHP)
+
+		if data.currentHP <= 0 then
+			gameOverModal.Visible = true
+		end
 	end
 
 	if data.stats and data.stats.Armor ~= nil then
@@ -780,12 +1132,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.wave then
-		local stateDesc = "ASSAUT"
-		if data.waveState == "RESTING" then stateDesc = "PAUSE"
-		elseif data.waveState == "CLEARING" then stateDesc = "NETTOYAGE"
-		elseif data.waveState == "BOSS" then stateDesc = "BOSS !"
-		end
-
+		currentSurvivingWave = data.wave
 		waveInfoLabel.Text = string.format("VAGUE %d (%ds) | %d ENNEMIS", data.wave, data.waveTimer or 0, data.activeEnemies or 0)
 	end
 
@@ -802,7 +1149,8 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 				iconFile = if wDef then wDef.iconFile else nil,
 			})
 		end
-		populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), wList)
+		cachedLastWeaponList = wList
+		populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), wList, cachedMaxWeaponSlots, { [5] = 3, [6] = 5 })
 	end
 
 	if data.passives then
@@ -816,7 +1164,8 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 				iconFile = p.iconFile,
 			})
 		end
-		populateRowSlots(passiveSlots, 6, Color3.fromRGB(200, 150, 255), pList)
+		cachedLastPassiveList = pList
+		populateRowSlots(passiveSlots, 6, Color3.fromRGB(200, 150, 255), pList, cachedMaxPassiveSlots, { [5] = 2, [6] = 4 })
 	end
 
 	if data.stats then
@@ -835,6 +1184,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 				})
 			end
 		end
-		populateRowSlots(statSlots, 6, Color3.fromRGB(50, 255, 120), sList)
+		cachedLastStatList = sList
+		populateRowSlots(statSlots, 6, Color3.fromRGB(50, 255, 120), sList, 6, nil)
 	end
 end)

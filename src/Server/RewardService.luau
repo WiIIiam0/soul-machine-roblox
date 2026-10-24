@@ -8,11 +8,13 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local StatTypes = require(Shared:WaitForChild("StatTypes"))
 local WeaponsData = require(Shared:WaitForChild("WeaponsData"))
 local PassivesData = require(Shared:WaitForChild("PassivesData"))
+local MetaProgressionData = require(Shared:WaitForChild("MetaProgressionData"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
 local WeaponService = require(script.Parent.WeaponService)
 local PassiveService = require(script.Parent.PassiveService)
+local MetaProgressionService = require(script.Parent.MetaProgressionService)
 
 export type RewardCard = {
 	id: string,
@@ -76,6 +78,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 	local cards: { RewardCard } = {}
 	local rng = Random.new()
 
+	local meta = MetaProgressionService.GetPlayerMeta(player)
+	local maxWeaponSlots = meta.weaponSlots
+	local maxPassiveSlots = meta.passiveSlots
+
 	local equippedWeapons = WeaponService.GetPlayerWeapons(player)
 
 	-- 1. Try to generate at least 1 weapon card (either upgrade an existing or offer new)
@@ -102,16 +108,15 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		end
 	end
 
-	-- New weapons (if player has less than 6 weapons)
+	-- New weapons (only if player has not reached their unlocked slot capacity)
 	local numWeapons = 0
 	for _ in pairs(equippedWeapons) do numWeapons += 1 end
 
-	if numWeapons < 6 then
+	if numWeapons < maxWeaponSlots then
 		for _, wId in ipairs(WEAPON_IDS) do
-			if not equippedWeapons[wId] then
+			if not equippedWeapons[wId] and MetaProgressionData.IsWeaponUnlocked(meta.level, wId) then
 				local wDef = WeaponsData.GetWeapon(wId)
 				if wDef and #wDef.ranks > 0 then
-					local rank1 = wDef.ranks[1]
 					table.insert(possibleWeaponCards, {
 						id = "WNew_" .. wId,
 						category = "WEAPON",
@@ -155,12 +160,23 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		statValue = bonus,
 	})
 
-	-- 3. Passive or Extra Card
-	if rng:NextNumber() < 0.65 then
-		-- Procedural or premade passive
+	-- 3. Passive or Extra Card (if player has not reached their unlocked passive slot capacity)
+	local equippedPassives = PassiveService.GetPlayerPassives(player)
+	local numPassives = #equippedPassives
+	local canOfferPassive = numPassives < maxPassiveSlots
+
+	if canOfferPassive and rng:NextNumber() < 0.65 then
+		-- Procedural or premade passive filtered by global unlock level
 		local passDef: PassivesData.PassiveDefinition
-		if #PassivesData.PREMADE_PASSIVES > 0 and rng:NextNumber() < 0.5 then
-			passDef = PassivesData.PREMADE_PASSIVES[rng:NextInteger(1, #PassivesData.PREMADE_PASSIVES)]
+		local unlockedPremades: { PassivesData.PassiveDefinition } = {}
+		for _, p in ipairs(PassivesData.PREMADE_PASSIVES) do
+			if MetaProgressionData.IsPassiveUnlocked(meta.level, p.id) then
+				table.insert(unlockedPremades, p)
+			end
+		end
+
+		if #unlockedPremades > 0 and rng:NextNumber() < 0.5 then
+			passDef = unlockedPremades[rng:NextInteger(1, #unlockedPremades)]
 		else
 			passDef = PassivesData.GenerateProceduralPassive(math.random(1, 999999))
 		end
