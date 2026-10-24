@@ -1,5 +1,5 @@
 --!strict
--- ArenaBuilder.luau: Builds an atmospheric cyberpunk/mecha battle arena dressed with PoHRoblox industrial blocks
+-- ArenaBuilder.luau: Builds an authentic LEGO Voxel mecha battle arena dressed with PoHRoblox industrial blocks
 -- Textures used from PoHRoblox BlockRegistry:
 --   NetheritePlating (composite dark metal floor)
 --   HazardStripes (yellow/black perimeter safety stripes)
@@ -23,6 +23,8 @@ local TEXTURES = {
 }
 
 -- Authentic LEGO 3D Studs (Picots cylindriques Voxel / LEGO de PoHRoblox)
+local BLOCK_SIZE = 4
+local BRICK_SEAM_GAP = 0.06
 local STUD_HEIGHT = 0.36
 local STUD_DIAMETER = 1.15
 local STUD_OFFSETS_2X2 = {
@@ -53,43 +55,70 @@ local function addAllFacesTexture(part: BasePart, textureId: string, studsU: num
 	end
 end
 
--- Génère les vrais picots cylindriques LEGO 3D sur le dessus des blocs (exactement comme dans PoHRoblox)
-local function addLegoStudsGrid(
+-- Crée un vrai bloc LEGO 4x4 avec ses 4 picots cylindriques 3D texturés (fidèle à PoHRoblox VoxelBrickRenderer)
+local function createLegoBlock(
 	parent: Instance,
-	widthX: number,
-	lengthZ: number,
-	topY: number,
-	centerPos: Vector3,
+	worldX: number,
+	worldZ: number,
 	color: Color3,
-	material: Enum.Material
-)
-	local halfX = widthX / 2
-	local halfZ = lengthZ / 2
-	for x = -halfX + 2, halfX - 2, 4 do
-		for z = -halfZ + 2, halfZ - 2, 4 do
-			for _, offset in ipairs(STUD_OFFSETS_2X2) do
-				local stud = Instance.new("Part")
-				stud.Name = "LegoStud"
-				stud.Shape = Enum.PartType.Cylinder
-				stud.Size = Vector3.new(STUD_HEIGHT, STUD_DIAMETER, STUD_DIAMETER)
-				stud.CFrame = CFrame.new(
-					centerPos.X + x + offset.X,
-					topY + STUD_HEIGHT * 0.5,
-					centerPos.Z + z + offset.Z
-				) * CFrame.Angles(0, 0, math.rad(90))
-				stud.Anchored = true
-				stud.CanCollide = false
-				stud.CanQuery = false
-				stud.CanTouch = false
-				stud.CastShadow = true
-				stud.Color = color
-				stud.Material = material
-				stud.TopSurface = Enum.SurfaceType.Smooth
-				stud.BottomSurface = Enum.SurfaceType.Smooth
-				stud.Parent = parent
-			end
-		end
+	material: Enum.Material,
+	textureId: string
+): BasePart
+	local brickWidth = BLOCK_SIZE - BRICK_SEAM_GAP
+	local brickHeight = 2.0 - (BRICK_SEAM_GAP * 0.5)
+
+	local brick = Instance.new("Part")
+	brick.Name = string.format("LegoBrick_%d_%d", math.floor(worldX), math.floor(worldZ))
+	brick.Size = Vector3.new(brickWidth, brickHeight, brickWidth)
+	brick.Position = Vector3.new(worldX, -brickHeight * 0.5, worldZ)
+	brick.Color = color
+	brick.Material = material
+	brick.Anchored = true
+	brick.CanCollide = true
+	brick.CanTouch = false
+	brick.TopSurface = Enum.SurfaceType.Smooth
+	brick.BottomSurface = Enum.SurfaceType.Smooth
+	brick.Parent = parent
+
+	-- Texture sur la face supérieure du bloc (4 studs par tuile)
+	addTopTexture(brick, textureId, BLOCK_SIZE, BLOCK_SIZE)
+
+	-- 4 picots cylindriques LEGO 3D sur le dessus
+	local topY = 0.0
+	for _, offset in ipairs(STUD_OFFSETS_2X2) do
+		local stud = Instance.new("Part")
+		stud.Name = "LegoStud"
+		stud.Shape = Enum.PartType.Cylinder
+		stud.Size = Vector3.new(STUD_HEIGHT, STUD_DIAMETER, STUD_DIAMETER)
+		stud.CFrame = CFrame.new(
+			worldX + offset.X,
+			topY + STUD_HEIGHT * 0.5,
+			worldZ + offset.Z
+		) * CFrame.Angles(0, 0, math.rad(90))
+		stud.Anchored = true
+		stud.CanCollide = false
+		stud.CanQuery = false
+		stud.CanTouch = false
+		stud.CastShadow = true
+		stud.Color = color
+		stud.Material = material
+		stud.TopSurface = Enum.SurfaceType.Smooth
+		stud.BottomSurface = Enum.SurfaceType.Smooth
+		stud.Parent = brick
+
+		-- Texture dézoomée à l'échelle exacte du bloc parent (fidèle à PoHRoblox VoxelBrickRenderer)
+		local studTex = Instance.new("Texture")
+		studTex.Name = "StudTexture_Top"
+		studTex.Face = Enum.NormalId.Right
+		studTex.Texture = textureId
+		studTex.StudsPerTileU = BLOCK_SIZE
+		studTex.StudsPerTileV = BLOCK_SIZE
+		studTex.OffsetStudsU = -offset.Z
+		studTex.OffsetStudsV = -offset.X
+		studTex.Parent = stud
 	end
+
+	return brick
 end
 
 function ArenaBuilder.BuildArena()
@@ -101,108 +130,87 @@ function ArenaBuilder.BuildArena()
 	local arena = Instance.new("Model")
 	arena.Name = "MechaArena"
 
-	-- 1. Main Arena Floor (300 x 300) with NetheritePlating
-	local floor = Instance.new("Part")
-	floor.Name = "Floor"
-	floor.Size = Vector3.new(300, 4, 300)
-	floor.Position = Vector3.new(0, -2, 0)
-	floor.Color = Color3.fromRGB(50, 48, 55)
-	floor.Material = Enum.Material.SmoothPlastic
-	floor.Anchored = true
-	floor.CanCollide = true
-	floor.Parent = arena
-	addTopTexture(floor, TEXTURES.NetheritePlating, 8, 8)
+	-- 1. Collision Subfloor (plaque invisible garantissant zéro chute et une physique lisse sous les briques)
+	local subfloor = Instance.new("Part")
+	subfloor.Name = "CollisionSubfloor"
+	subfloor.Size = Vector3.new(152, 4, 152)
+	subfloor.Position = Vector3.new(0, -3, 0)
+	subfloor.Transparency = 1
+	subfloor.Anchored = true
+	subfloor.CanCollide = true
+	subfloor.Parent = arena
 
-	-- Picots cylindriques LEGO 3D sur l'arène de combat centrale (100x100)
-	addLegoStudsGrid(arena, 100, 100, 0.0, Vector3.new(0, 0, 0), Color3.fromRGB(50, 48, 55), Enum.Material.SmoothPlastic)
+	-- 2. Génération de l'arène Voxel LEGO complète (36 x 36 blocs = 144 x 144 studs)
+	local blocksFolder = Instance.new("Folder")
+	blocksFolder.Name = "LegoFloorBlocks"
+	blocksFolder.Parent = arena
 
-	-- 2. Perimeter Warning Borders (Hazard Stripes - 12 studs wide along outer walls)
-	local hazardBorders = {
-		{ name = "HazardNorth", size = Vector3.new(300, 0.2, 12), pos = Vector3.new(0, 0.05, 144) },
-		{ name = "HazardSouth", size = Vector3.new(300, 0.2, 12), pos = Vector3.new(0, 0.05, -144) },
-		{ name = "HazardEast",  size = Vector3.new(12, 0.2, 276), pos = Vector3.new(144, 0.05, 0) },
-		{ name = "HazardWest",  size = Vector3.new(12, 0.2, 276), pos = Vector3.new(-144, 0.05, 0) },
-	}
+	local GRID_MIN = -18
+	local GRID_MAX = 17 -- 36 blocs (-18 à 17)
 
-	for _, cfg in ipairs(hazardBorders) do
-		local hPart = Instance.new("Part")
-		hPart.Name = cfg.name
-		hPart.Size = cfg.size
-		hPart.Position = cfg.pos
-		hPart.Color = Color3.fromRGB(245, 210, 20)
-		hPart.Material = Enum.Material.SmoothPlastic
-		hPart.Anchored = true
-		hPart.CanCollide = false
-		hPart.Parent = arena
-		addTopTexture(hPart, TEXTURES.HazardStripes, 4, 4)
+	for gx = GRID_MIN, GRID_MAX do
+		for gz = GRID_MIN, GRID_MAX do
+			local worldX = gx * BLOCK_SIZE + 2
+			local worldZ = gz * BLOCK_SIZE + 2
 
-		-- Picots cylindriques LEGO sur les bandes de signalisation
-		addLegoStudsGrid(arena, cfg.size.X, cfg.size.Z, cfg.pos.Y + 0.1, cfg.pos, Color3.fromRGB(245, 210, 20), Enum.Material.SmoothPlastic)
+			-- Détermination de la zone du bloc
+			local isBorder = (gx <= GRID_MIN + 1 or gx >= GRID_MAX - 1 or gz <= GRID_MIN + 1 or gz >= GRID_MAX - 1)
+			local isCrosswalk = (gx == 0 or gx == -1 or gz == 0 or gz == -1)
+			local isReactor = (gx >= -3 and gx <= 2 and gz >= -3 and gz <= 2)
+
+			local bColor: Color3
+			local bMat: Enum.Material
+			local bTex: string
+
+			if isBorder then
+				-- Bandes de danger jaunes & noires LEGO
+				bColor = Color3.fromRGB(245, 210, 20)
+				bMat = Enum.Material.SmoothPlastic
+				bTex = TEXTURES.HazardStripes
+			elseif isReactor then
+				-- Réacteur à plasma central lumineux (ReactorCore)
+				bColor = Color3.fromRGB(255, 60, 40)
+				bMat = Enum.Material.Neon
+				bTex = TEXTURES.ReactorCore
+			elseif isCrosswalk then
+				-- Passerelles transversales en acier riveté (IronArmor)
+				bColor = Color3.fromRGB(190, 195, 205)
+				bMat = Enum.Material.SmoothPlastic
+				bTex = TEXTURES.IronArmor
+			else
+				-- Dalles de combat standard en composite sombre (NetheritePlating)
+				bColor = Color3.fromRGB(50, 48, 55)
+				bMat = Enum.Material.SmoothPlastic
+				bTex = TEXTURES.NetheritePlating
+			end
+
+			createLegoBlock(blocksFolder, worldX, worldZ, bColor, bMat, bTex)
+		end
 	end
 
-	-- 3. Crosswalk Industrial Walkways (IronArmor - 16 studs wide cross through center)
-	local walkways = {
-		{ name = "WalkwayX", size = Vector3.new(276, 0.1, 16), pos = Vector3.new(0, 0.02, 0) },
-		{ name = "WalkwayZ", size = Vector3.new(16, 0.1, 276), pos = Vector3.new(0, 0.02, 0) },
-	}
+	-- 3. Lumière dynamique du réacteur central
+	local reactorCoreLight = Instance.new("PointLight")
+	reactorCoreLight.Name = "ReactorLight"
+	reactorCoreLight.Color = Color3.fromRGB(255, 60, 40)
+	reactorCoreLight.Brightness = 2.8
+	reactorCoreLight.Range = 38
+	reactorCoreLight.Shadows = true
+	local centerPad = Instance.new("Part")
+	centerPad.Name = "CenterLightAnchor"
+	centerPad.Size = Vector3.new(2, 2, 2)
+	centerPad.Position = Vector3.new(0, 1.2, 0)
+	centerPad.Transparency = 1
+	centerPad.Anchored = true
+	centerPad.CanCollide = false
+	centerPad.Parent = arena
+	reactorCoreLight.Parent = centerPad
 
-	for _, cfg in ipairs(walkways) do
-		local wPart = Instance.new("Part")
-		wPart.Name = cfg.name
-		wPart.Size = cfg.size
-		wPart.Position = cfg.pos
-		wPart.Color = Color3.fromRGB(195, 200, 210)
-		wPart.Material = Enum.Material.SmoothPlastic
-		wPart.Anchored = true
-		wPart.CanCollide = false
-		wPart.Parent = arena
-		addTopTexture(wPart, TEXTURES.IronArmor, 6, 6)
-
-		-- Picots cylindriques LEGO sur les passerelles en acier
-		addLegoStudsGrid(arena, cfg.size.X, cfg.size.Z, cfg.pos.Y + 0.05, cfg.pos, Color3.fromRGB(195, 200, 210), Enum.Material.SmoothPlastic)
-	end
-
-	-- 4. Central Plasma Reactor Generator Core (ReactorCore)
-	local reactorPad = Instance.new("Part")
-	reactorPad.Name = "ReactorPad"
-	reactorPad.Size = Vector3.new(36, 0.25, 36)
-	reactorPad.Position = Vector3.new(0, 0.08, 0)
-	reactorPad.Color = Color3.fromRGB(240, 50, 40)
-	reactorPad.Material = Enum.Material.Neon
-	reactorPad.Anchored = true
-	reactorPad.CanCollide = false
-	reactorPad.Parent = arena
-	addTopTexture(reactorPad, TEXTURES.ReactorCore, 6, 6)
-
-	-- Picots cylindriques lumineux sur le réacteur central
-	addLegoStudsGrid(arena, 36, 36, 0.08 + 0.12, Vector3.new(0, 0, 0), Color3.fromRGB(255, 60, 40), Enum.Material.Neon)
-
-	local reactorLight = Instance.new("PointLight")
-	reactorLight.Color = Color3.fromRGB(255, 60, 40)
-	reactorLight.Brightness = 2.5
-	reactorLight.Range = 36
-	reactorLight.Parent = reactorPad
-
-	-- Inner Cyber Ring around the reactor
-	local centerRing = Instance.new("Part")
-	centerRing.Name = "CenterRing"
-	centerRing.Size = Vector3.new(44, 0.1, 44)
-	centerRing.Position = Vector3.new(0, 0.12, 0)
-	centerRing.Shape = Enum.PartType.Cylinder
-	centerRing.Orientation = Vector3.new(0, 0, 90)
-	centerRing.Color = Color3.fromRGB(0, 220, 255)
-	centerRing.Material = Enum.Material.Neon
-	centerRing.Transparency = 0.3
-	centerRing.Anchored = true
-	centerRing.CanCollide = false
-	centerRing.Parent = arena
-
-	-- 5. Perimeter Laser Barriers (North, South, East, West)
+	-- 4. Barrières Laser d'énergie en périphérie (Nord, Sud, Est, Ouest à 73 studs)
 	local wallConfigs = {
-		{ name = "WallNorth", size = Vector3.new(300, 16, 2), pos = Vector3.new(0, 8, 150) },
-		{ name = "WallSouth", size = Vector3.new(300, 16, 2), pos = Vector3.new(0, 8, -150) },
-		{ name = "WallEast",  size = Vector3.new(2, 16, 300), pos = Vector3.new(150, 8, 0) },
-		{ name = "WallWest",  size = Vector3.new(2, 16, 300), pos = Vector3.new(-150, 8, 0) },
+		{ name = "WallNorth", size = Vector3.new(144, 16, 2), pos = Vector3.new(0, 8, 73) },
+		{ name = "WallSouth", size = Vector3.new(144, 16, 2), pos = Vector3.new(0, 8, -73) },
+		{ name = "WallEast",  size = Vector3.new(2, 16, 144), pos = Vector3.new(73, 8, 0) },
+		{ name = "WallWest",  size = Vector3.new(2, 16, 144), pos = Vector3.new(-73, 8, 0) },
 	}
 
 	for _, cfg in ipairs(wallConfigs) do
@@ -210,28 +218,26 @@ function ArenaBuilder.BuildArena()
 		wall.Name = cfg.name
 		wall.Size = cfg.size
 		wall.Position = cfg.pos
-		wall.Color = Color3.fromRGB(0, 180, 255)
+		wall.Color = Color3.fromRGB(0, 190, 255)
 		wall.Material = Enum.Material.Neon
-		wall.Transparency = 0.75
+		wall.Transparency = 0.72
 		wall.Anchored = true
 		wall.CanCollide = true
 		wall.Parent = arena
 	end
 
-	-- 6. Industrial Beacon Lamps (RedstoneLamp) along perimeter
+	-- 5. Balises industrielles RedstoneLamp le long du périmètre
 	local beaconPositions = {
-		-- North & South
-		Vector3.new(-90, 0.5, 144), Vector3.new(0, 0.5, 144), Vector3.new(90, 0.5, 144),
-		Vector3.new(-90, 0.5, -144), Vector3.new(0, 0.5, -144), Vector3.new(90, 0.5, -144),
-		-- East & West
-		Vector3.new(144, 0.5, -90), Vector3.new(144, 0.5, 0), Vector3.new(144, 0.5, 90),
-		Vector3.new(-144, 0.5, -90), Vector3.new(-144, 0.5, 0), Vector3.new(-144, 0.5, 90),
+		Vector3.new(-48, 0.5, 68), Vector3.new(0, 0.5, 68), Vector3.new(48, 0.5, 68),
+		Vector3.new(-48, 0.5, -68), Vector3.new(0, 0.5, -68), Vector3.new(48, 0.5, -68),
+		Vector3.new(68, 0.5, -48), Vector3.new(68, 0.5, 0), Vector3.new(68, 0.5, 48),
+		Vector3.new(-68, 0.5, -48), Vector3.new(-68, 0.5, 0), Vector3.new(-68, 0.5, 48),
 	}
 
 	for bIdx, bPos in ipairs(beaconPositions) do
 		local lamp = Instance.new("Part")
 		lamp.Name = "PerimeterLamp_" .. bIdx
-		lamp.Size = Vector3.new(4, 1.2, 4)
+		lamp.Size = Vector3.new(3.8, 1.2, 3.8)
 		lamp.Position = bPos
 		lamp.Color = Color3.fromRGB(255, 175, 60)
 		lamp.Material = Enum.Material.Neon
@@ -242,25 +248,24 @@ function ArenaBuilder.BuildArena()
 
 		local lLight = Instance.new("PointLight")
 		lLight.Color = Color3.fromRGB(255, 180, 70)
-		lLight.Brightness = 1.8
-		lLight.Range = 22
+		lLight.Brightness = 1.6
+		lLight.Range = 20
 		lLight.Parent = lamp
 	end
 
-	-- 7. 4 Corner Heavy Energy Towers with ObserverSensor & IronArmor
+	-- 6. 4 Tours énergétiques lourdes aux coins avec ObserverSensor
 	local cornerPositions = {
-		Vector3.new(138, 0, 138),
-		Vector3.new(-138, 0, 138),
-		Vector3.new(138, 0, -138),
-		Vector3.new(-138, 0, -138),
+		Vector3.new(66, 0, 66),
+		Vector3.new(-66, 0, 66),
+		Vector3.new(66, 0, -66),
+		Vector3.new(-66, 0, -66),
 	}
 
 	for idx, cPos in ipairs(cornerPositions) do
-		-- Tower Base (IronArmor riveted plating)
 		local tower = Instance.new("Part")
 		tower.Name = "Tower_" .. idx
-		tower.Size = Vector3.new(8, 28, 8)
-		tower.Position = cPos + Vector3.new(0, 14, 0)
+		tower.Size = Vector3.new(8, 24, 8)
+		tower.Position = cPos + Vector3.new(0, 12, 0)
 		tower.Color = Color3.fromRGB(180, 185, 195)
 		tower.Material = Enum.Material.SmoothPlastic
 		tower.Anchored = true
@@ -268,10 +273,9 @@ function ArenaBuilder.BuildArena()
 		tower.Parent = arena
 		addAllFacesTexture(tower, TEXTURES.IronArmor, 4, 4)
 
-		-- Tower Glowing Core
 		local towerLight = Instance.new("Part")
 		towerLight.Name = "TowerCore"
-		towerLight.Size = Vector3.new(4, 26, 4)
+		towerLight.Size = Vector3.new(4, 22, 4)
 		towerLight.Position = tower.Position
 		towerLight.Color = Color3.fromRGB(0, 240, 255)
 		towerLight.Material = Enum.Material.Neon
@@ -281,15 +285,14 @@ function ArenaBuilder.BuildArena()
 
 		local pLight = Instance.new("PointLight")
 		pLight.Color = Color3.fromRGB(0, 220, 255)
-		pLight.Brightness = 3
-		pLight.Range = 45
+		pLight.Brightness = 2.5
+		pLight.Range = 35
 		pLight.Parent = towerLight
 
-		-- Sensor Cap on top of tower (ObserverSensor)
 		local cap = Instance.new("Part")
 		cap.Name = "TowerCap_" .. idx
 		cap.Size = Vector3.new(6, 4, 6)
-		cap.Position = cPos + Vector3.new(0, 30, 0)
+		cap.Position = cPos + Vector3.new(0, 26, 0)
 		cap.Color = Color3.fromRGB(115, 115, 120)
 		cap.Material = Enum.Material.SmoothPlastic
 		cap.Anchored = true
@@ -298,29 +301,27 @@ function ArenaBuilder.BuildArena()
 		addAllFacesTexture(cap, TEXTURES.ObserverSensor, 3, 3)
 	end
 
-	-- 8. Central Spawn Location
+	-- 7. Spawn Central
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "MechaSpawn"
-	spawn.Size = Vector3.new(12, 0.5, 12)
-	spawn.Position = Vector3.new(0, 0.15, 0)
-	spawn.Color = Color3.fromRGB(40, 45, 60)
-	spawn.Material = Enum.Material.SmoothPlastic
+	spawn.Size = Vector3.new(8, 0.2, 8)
+	spawn.Position = Vector3.new(0, 0.1, 0)
+	spawn.Transparency = 1
 	spawn.Anchored = true
 	spawn.CanCollide = false
-	spawn.Transparency = 1
 	spawn.Duration = 0
 	spawn.Parent = arena
 
 	arena.Parent = Workspace
 
-	-- 9. Lighting Sci-Fi Atmosphere
-	Lighting.ClockTime = 20.5 -- Night / Dusk
+	-- 8. Éclairage Sci-Fi
+	Lighting.ClockTime = 20.5
 	Lighting.Brightness = 1.2
 	Lighting.Ambient = Color3.fromRGB(35, 40, 55)
 	Lighting.OutdoorAmbient = Color3.fromRGB(20, 25, 40)
 	Lighting.FogColor = Color3.fromRGB(10, 14, 25)
-	Lighting.FogStart = 150
-	Lighting.FogEnd = 350
+	Lighting.FogStart = 120
+	Lighting.FogEnd = 300
 
 	local bloom = Lighting:FindFirstChildOfClass("BloomEffect")
 	if not bloom then

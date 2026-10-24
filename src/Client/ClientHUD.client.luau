@@ -13,6 +13,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local WeaponsData = require(Shared:WaitForChild("WeaponsData"))
+local StatTypes = require(Shared:WaitForChild("StatTypes"))
 
 -- Create Main ScreenGui
 local screenGui = Instance.new("ScreenGui")
@@ -169,7 +170,41 @@ local _, weaponSlots = createInvRow("Weapons", "ARMES", Color3.fromRGB(255, 100,
 local _, passiveSlots = createInvRow("Passives", "PASSIFS", Color3.fromRGB(200, 150, 255), 44)
 local _, statSlots = createInvRow("Stats", "STATS", Color3.fromRGB(100, 255, 150), 80)
 
-local function populateRowSlots(container: Frame, count: number, borderColor: Color3, items: { { name: string, rank: number, glyph: string?, icon: string? } })
+local function resolveTexture(iconFile: string?, rawIcon: string?): string?
+	local candidates = {
+		ReplicatedStorage:FindFirstChild("Icons"),
+		ReplicatedStorage:FindFirstChild("Assets"),
+		ReplicatedStorage:FindFirstChild("Images"),
+		ReplicatedStorage,
+	}
+
+	if iconFile and iconFile ~= "" then
+		local cleanName = string.gsub(iconFile, "%.png$", "")
+		for _, folder in ipairs(candidates) do
+			if folder then
+				local found = folder:FindFirstChild(iconFile) or folder:FindFirstChild(cleanName)
+				if found then
+					if found:IsA("Decal") or found:IsA("Texture") then
+						return found.Texture
+					elseif found:IsA("ImageLabel") or found:IsA("ImageButton") then
+						return found.Image
+					elseif found:IsA("StringValue") then
+						return found.Value
+					end
+				end
+			end
+		end
+	end
+
+	-- Ignore any bogus fallback placeholders (rbxassetid://10709791...)
+	if rawIcon and rawIcon ~= "" and not string.find(rawIcon, "rbxassetid://10709791") then
+		return rawIcon
+	end
+
+	return nil
+end
+
+local function populateRowSlots(container: Frame, count: number, borderColor: Color3, items: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } })
 	for _, child in ipairs(container:GetChildren()) do
 		if child:IsA("Frame") then child:Destroy() end
 	end
@@ -206,19 +241,21 @@ local function populateRowSlots(container: Frame, count: number, borderColor: Co
 			tagLabel.TextColor3 = borderColor
 			tagLabel.Font = Enum.Font.GothamBlack
 			tagLabel.TextSize = 8
-			tagLabel.Text = item.tag or string.sub(item.name, 1, 4):upper()
+			tagLabel.Text = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
 			tagLabel.ZIndex = 1
 			tagLabel.Parent = box
 
-			-- Optional image overlay if valid
-			if item.icon and item.icon ~= "" and not string.find(item.icon, "rbxassetid://107097914") then
+			-- Resolve texture from ReplicatedStorage.Icons (or valid asset ID)
+			local resolved = resolveTexture(item.iconFile, item.icon)
+			if resolved and resolved ~= "" then
 				local iconImg = Instance.new("ImageLabel")
 				iconImg.Size = UDim2.new(1, -4, 1, -4)
 				iconImg.Position = UDim2.new(0, 2, 0, 2)
 				iconImg.BackgroundTransparency = 1
-				iconImg.Image = item.icon
+				iconImg.Image = resolved
 				iconImg.ZIndex = 2
 				iconImg.Parent = box
+				tagLabel.Visible = false
 			end
 
 			-- Rank text badge in bottom-right corner
@@ -521,16 +558,8 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 	iconBadge.Parent = iconBox
 
 	-- Check if asset exists in ReplicatedStorage.Icons (Bulk Import folder)
-	local resolvedImage = cardData.icon
-	local iconsFolder = ReplicatedStorage:FindFirstChild("Icons")
-	if iconsFolder and cardData.iconFile then
-		local found = iconsFolder:FindFirstChild(cardData.iconFile) or iconsFolder:FindFirstChild(string.gsub(cardData.iconFile, "%.png$", ""))
-		if found and (found:IsA("Decal") or found:IsA("Texture")) then
-			resolvedImage = found.Texture
-		end
-	end
-
-	if resolvedImage and resolvedImage ~= "" and not string.find(resolvedImage, "rbxassetid://107097914") then
+	local resolvedImage = resolveTexture(cardData.iconFile, cardData.icon)
+	if resolvedImage and resolvedImage ~= "" then
 		local iconImg = Instance.new("ImageLabel")
 		iconImg.Size = UDim2.new(1, -10, 1, -10)
 		iconImg.Position = UDim2.new(0, 5, 0, 5)
@@ -538,6 +567,9 @@ local function createChoiceCard(index: number, cardData: any, xOffset: number): 
 		iconImg.Image = resolvedImage
 		iconImg.ZIndex = 2
 		iconImg.Parent = iconBox
+		iconBadge.Visible = false
+	else
+		iconBadge.Visible = true
 	end
 
 	-- Subtitle (e.g. RANG 1 ➔ 2 or +20% PV)
@@ -689,7 +721,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 
 	-- Populate 3-Row Inventory Slots
 	if data.weapons then
-		local wList: { { name: string, rank: number, tag: string?, icon: string? } } = {}
+		local wList: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
 		for wId, rank in pairs(data.weapons) do
 			local wDef = WeaponsData.GetWeapon(wId)
 			table.insert(wList, {
@@ -697,6 +729,7 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 				rank = rank,
 				tag = if wDef and wDef.tag then string.gsub(wDef.tag, "[%[%]%s]", "") else string.sub(wId, 1, 4):upper(),
 				icon = if wDef then wDef.icon else nil,
+				iconFile = if wDef then wDef.iconFile else nil,
 			})
 		end
 		populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), wList)

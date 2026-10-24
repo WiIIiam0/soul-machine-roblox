@@ -60,16 +60,16 @@ local function spawnEnemyAroundPlayers(enemyId: string)
 	local hrp = chosenPlayer.Character:FindFirstChild("HumanoidRootPart") :: BasePart
 	local centerPos = hrp.Position
 
-	-- Random angle on outer ring (radius 45 to 60 studs)
+	-- Random angle on outer ring (radius 32 to 52 studs)
 	local angle = math.random() * math.pi * 2
-	local dist = math.random(42, 58)
+	local dist = math.random(32, 52)
 	local spawnPos = centerPos + Vector3.new(math.cos(angle) * dist, 0.5, math.sin(angle) * dist)
 
-	-- Clamp within arena boundaries (-140 to 140)
+	-- Clamp within arena boundaries (inside laser walls at +/- 72)
 	spawnPos = Vector3.new(
-		math.clamp(spawnPos.X, -130, 130),
+		math.clamp(spawnPos.X, -66, 66),
 		1.5,
-		math.clamp(spawnPos.Z, -130, 130)
+		math.clamp(spawnPos.Z, -66, 66)
 	)
 
 	EnemyService.SpawnEnemy(enemyId, spawnPos)

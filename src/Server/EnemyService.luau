@@ -112,20 +112,8 @@ local function findCustomTemplate(enemyId: string): Model?
 end
 
 local function getEnemyFixedY(enemyId: string, sizeY: number): number
-	if enemyId == "ScoutDrone" then
-		return 2.4
-	elseif enemyId == "MetaDrone" then
-		return 2.6
-	elseif enemyId == "KamikazeRoller" then
-		return 0.95
-	elseif enemyId == "OverlordBoss" then
-		return 3.6
-	elseif enemyId == "SniperBot" then
-		return 1.65
-	elseif enemyId == "AssaultMecha" then
-		return 1.65
-	elseif enemyId == "HeavyJuggernaut" then
-		return 2.25
+	if enemyId == "ScoutDrone" or enemyId == "MetaDrone" then
+		return 3.0 + (sizeY * 0.5)
 	end
 	return sizeY * 0.5 + 0.05
 end
@@ -460,7 +448,8 @@ local function createEnemyModel(config: EnemiesData.EnemyConfig, spawnPos: Vecto
 		end
 
 		local scaledExtents = model:GetExtentsSize()
-		local fixedY = if config.id == "ScoutDrone" or config.id == "MetaDrone" then 2.4 else (scaledExtents.Y * 0.5 + 0.05)
+		local isFlying = (config.id == "ScoutDrone" or config.id == "MetaDrone")
+		local fixedY = if isFlying then (3.0 + scaledExtents.Y * 0.5) else (scaledExtents.Y * 0.5 + 0.05)
 		local centeredSpawn = Vector3.new(spawnPos.X, fixedY, spawnPos.Z)
 
 		model:PivotTo(CFrame.new(centeredSpawn))
