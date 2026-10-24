@@ -171,7 +171,7 @@ metaLevelLabel.TextColor3 = Color3.fromRGB(255, 215, 60)
 metaLevelLabel.Font = Enum.Font.GothamBlack
 metaLevelLabel.TextSize = 10
 metaLevelLabel.TextXAlignment = Enum.TextXAlignment.Left
-metaLevelLabel.Text = "★ GLOBAL : NIV. 1"
+metaLevelLabel.Text = "ADN : 0 XP"
 metaLevelLabel.Parent = metaBarContainer
 
 local metaXPBarBg = Instance.new("Frame")
@@ -204,7 +204,7 @@ metaXPText.BackgroundTransparency = 1
 metaXPText.TextColor3 = Color3.fromRGB(255, 255, 255)
 metaXPText.Font = Enum.Font.GothamBold
 metaXPText.TextSize = 8
-metaXPText.Text = "0 / 80 EXP"
+metaXPText.Text = "0 / 522 ADN"
 metaXPText.Parent = metaXPBarBg
 
 local metaSlotsLabel = Instance.new("TextLabel")
@@ -215,7 +215,7 @@ metaSlotsLabel.BackgroundTransparency = 1
 metaSlotsLabel.TextColor3 = Color3.fromRGB(180, 220, 255)
 metaSlotsLabel.Font = Enum.Font.GothamBold
 metaSlotsLabel.TextSize = 9
-metaSlotsLabel.Text = "SLOTS : 4/6 ARM | 4/6 PAS"
+metaSlotsLabel.Text = "SLOTS : 1 ARM | 1 PAS | 1 STAT"
 metaSlotsLabel.Parent = metaBarContainer
 
 -- --- 3. TOP-LEFT: 3-ROW INVENTORY (ARMES, PASSIFS, STATS avec Emplacements Verrouillés) ---
@@ -267,9 +267,50 @@ local function createInvRow(name: string, labelText: string, labelColor: Color3,
 	return row, slots
 end
 
-local _, weaponSlots = createInvRow("Weapons", "ARMES", Color3.fromRGB(255, 100, 100), 8)
+local weaponsRow, weaponSlots = createInvRow("Weapons", "ARMES", Color3.fromRGB(255, 100, 100), 8)
 local _, passiveSlots = createInvRow("Passives", "PASSIFS", Color3.fromRGB(200, 150, 255), 48)
 local _, statSlots = createInvRow("Stats", "STATS", Color3.fromRGB(100, 255, 150), 88)
+
+-- Temporary Starter Gun Box (matches Unity tempWeaponBox in UIManager.cs)
+local tempWeaponBox = Instance.new("Frame")
+tempWeaponBox.Name = "TempWeaponBox"
+tempWeaponBox.Size = UDim2.new(0, 30, 0, 30)
+tempWeaponBox.Position = UDim2.new(0, 75, 0, 1)
+tempWeaponBox.BackgroundColor3 = Color3.fromRGB(24, 20, 12)
+tempWeaponBox.BorderSizePixel = 0
+tempWeaponBox.Visible = false
+tempWeaponBox.Parent = weaponsRow
+
+local twbCorner = Instance.new("UICorner")
+twbCorner.CornerRadius = UDim.new(0, 6)
+twbCorner.Parent = tempWeaponBox
+
+local twbStroke = Instance.new("UIStroke")
+twbStroke.Color = Color3.fromRGB(255, 180, 50)
+twbStroke.Thickness = 1.2
+twbStroke.Transparency = 0.25
+twbStroke.Parent = tempWeaponBox
+
+local twbIcon = Instance.new("ImageLabel")
+twbIcon.Name = "Icon"
+twbIcon.Size = UDim2.new(1, -4, 1, -4)
+twbIcon.Position = UDim2.new(0, 2, 0, 2)
+twbIcon.BackgroundTransparency = 1
+twbIcon.ZIndex = 2
+twbIcon.Parent = tempWeaponBox
+
+local twbTag = Instance.new("TextLabel")
+twbTag.Name = "Tag"
+twbTag.Size = UDim2.new(1, 0, 0, 10)
+twbTag.Position = UDim2.new(0, 0, 1, -10)
+twbTag.BackgroundColor3 = Color3.fromRGB(12, 10, 8)
+twbTag.BackgroundTransparency = 0.2
+twbTag.TextColor3 = Color3.fromRGB(255, 200, 70)
+twbTag.Font = Enum.Font.GothamBold
+twbTag.TextSize = 7
+twbTag.Text = "INIT"
+twbTag.ZIndex = 3
+twbTag.Parent = tempWeaponBox
 
 -- Texture resolution cache
 local textureCache: { [string]: string } = {}
@@ -356,32 +397,36 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 	return nil
 end
 
-local cachedMaxWeaponSlots = 4
-local cachedMaxPassiveSlots = 4
+local cachedTotalXP = 0
+local cachedMaxTimelineXP = 522
+local cachedNextUpcomingXP = 603
+local cachedMaxWeaponSlots = 1
+local cachedMaxPassiveSlots = 1
+local cachedMaxStatSlots = 1
+local cachedMaxWeaponRank = 1
+local cachedMaxStatRank = 3
+
 local cachedLastWeaponList: { any } = {}
 local cachedLastPassiveList: { any } = {}
 local cachedLastStatList: { any } = {}
+local cachedHasTempWeapon = false
 
+-- 100% Faithful to Unity UIManager.cs PopulateSlots & PopulatePassiveSlots
 local function populateRowSlots(
 	container: Frame,
-	count: number,
+	maxCount: number,
 	borderColor: Color3,
-	items: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } },
-	unlockedSlots: number?,
-	unlockLevelMap: { [number]: number }?
+	items: { { name: string, rank: number, maxRank: number?, tag: string?, glyph: string?, icon: string?, iconFile: string? } }
 )
 	for _, child in ipairs(container:GetChildren()) do
 		if child:IsA("Frame") then child:Destroy() end
 	end
 
-	local maxUnlocked = unlockedSlots or count
-
-	for i = 1, count do
+	for i = 1, maxCount do
 		local box = Instance.new("Frame")
 		box.Name = "Slot_" .. i
 		box.Size = UDim2.new(0, 30, 0, 30)
 		box.Position = UDim2.new(0, (i - 1) * 34, 0, 1)
-		box.BackgroundColor3 = Color3.fromRGB(14, 18, 30)
 		box.BorderSizePixel = 0
 		box.Parent = container
 
@@ -393,85 +438,61 @@ local function populateRowSlots(
 		bStroke.Thickness = 1.2
 		bStroke.Parent = box
 
-		if i > maxUnlocked then
-			-- LOCKED SLOT
-			box.BackgroundColor3 = Color3.fromRGB(8, 10, 16)
-			bStroke.Color = Color3.fromRGB(90, 40, 50)
-			bStroke.Transparency = 0.5
+		local item = items[i]
+		if item then
+			-- Slot Filled (slot-filled in Unity)
+			bStroke.Color = borderColor
+			bStroke.Transparency = 0.2
+			box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
 
-			local reqLvl = (unlockLevelMap and unlockLevelMap[i]) or (i - 1)
-			local lockIcon = Instance.new("TextLabel")
-			lockIcon.Name = "LockIcon"
-			lockIcon.Size = UDim2.new(1, 0, 0.55, 0)
-			lockIcon.Position = UDim2.new(0, 0, 0, 1)
-			lockIcon.BackgroundTransparency = 1
-			lockIcon.Text = "🔒"
-			lockIcon.TextSize = 10
-			lockIcon.Parent = box
+			local tagLabel = Instance.new("TextLabel")
+			tagLabel.Name = "Tag"
+			tagLabel.Size = UDim2.new(1, -2, 1, -2)
+			tagLabel.Position = UDim2.new(0, 1, 0, 1)
+			tagLabel.BackgroundTransparency = 1
+			tagLabel.TextColor3 = borderColor
+			tagLabel.Font = Enum.Font.GothamBlack
+			tagLabel.TextSize = 8
+			tagLabel.Text = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
+			tagLabel.ZIndex = 1
+			tagLabel.Parent = box
 
-			local lvlReqLabel = Instance.new("TextLabel")
-			lvlReqLabel.Name = "LvlReq"
-			lvlReqLabel.Size = UDim2.new(1, 0, 0.45, 0)
-			lvlReqLabel.Position = UDim2.new(0, 0, 0.55, -2)
-			lvlReqLabel.BackgroundTransparency = 1
-			lvlReqLabel.TextColor3 = Color3.fromRGB(255, 120, 120)
-			lvlReqLabel.Font = Enum.Font.GothamBold
-			lvlReqLabel.TextSize = 7
-			lvlReqLabel.Text = "NIV." .. reqLvl
-			lvlReqLabel.Parent = box
-		else
-			local item = items[i]
-			if item then
-				bStroke.Color = borderColor
-				bStroke.Transparency = 0.2
-				box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
-
-				local tagLabel = Instance.new("TextLabel")
-				tagLabel.Name = "Tag"
-				tagLabel.Size = UDim2.new(1, -2, 1, -2)
-				tagLabel.Position = UDim2.new(0, 1, 0, 1)
-				tagLabel.BackgroundTransparency = 1
-				tagLabel.TextColor3 = borderColor
-				tagLabel.Font = Enum.Font.GothamBlack
-				tagLabel.TextSize = 8
-				tagLabel.Text = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
-				tagLabel.ZIndex = 1
-				tagLabel.Parent = box
-
-				local resolved = resolveTexture(item.iconFile, item.icon)
-				if resolved and resolved ~= "" then
-					local iconImg = Instance.new("ImageLabel")
-					iconImg.Size = UDim2.new(1, -4, 1, -4)
-					iconImg.Position = UDim2.new(0, 2, 0, 2)
-					iconImg.BackgroundTransparency = 1
-					iconImg.Image = resolved
-					iconImg.ZIndex = 2
-					iconImg.Parent = box
-					tagLabel.Visible = false
-				end
-
-				if item.rank and item.rank > 0 then
-					local rankBadge = Instance.new("TextLabel")
-					rankBadge.Name = "RankBadge"
-					rankBadge.Size = UDim2.new(0, 13, 0, 11)
-					rankBadge.Position = UDim2.new(1, -13, 1, -11)
-					rankBadge.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
-					rankBadge.BackgroundTransparency = 0.2
-					rankBadge.TextColor3 = borderColor
-					rankBadge.Font = Enum.Font.GothamBlack
-					rankBadge.TextSize = 8
-					rankBadge.Text = tostring(item.rank)
-					rankBadge.ZIndex = 3
-					rankBadge.Parent = box
-
-					local rCorner = Instance.new("UICorner")
-					rCorner.CornerRadius = UDim.new(0, 3)
-					rCorner.Parent = rankBadge
-				end
-			else
-				bStroke.Color = Color3.fromRGB(40, 50, 70)
-				bStroke.Transparency = 0.7
+			local resolved = resolveTexture(item.iconFile, item.icon)
+			if resolved and resolved ~= "" then
+				local iconImg = Instance.new("ImageLabel")
+				iconImg.Size = UDim2.new(1, -4, 1, -4)
+				iconImg.Position = UDim2.new(0, 2, 0, 2)
+				iconImg.BackgroundTransparency = 1
+				iconImg.Image = resolved
+				iconImg.ZIndex = 2
+				iconImg.Parent = box
+				tagLabel.Visible = false
 			end
+
+			-- Rank text badge (matching levelTexts "X/X" in Unity UIManager.cs)
+			if item.rank and item.rank > 0 then
+				local rankBadge = Instance.new("TextLabel")
+				rankBadge.Name = "RankBadge"
+				rankBadge.Size = UDim2.new(0, 18, 0, 11)
+				rankBadge.Position = UDim2.new(1, -19, 1, -11)
+				rankBadge.BackgroundColor3 = Color3.fromRGB(10, 15, 25)
+				rankBadge.BackgroundTransparency = 0.2
+				rankBadge.TextColor3 = Color3.fromRGB(255, 255, 255)
+				rankBadge.Font = Enum.Font.GothamBold
+				rankBadge.TextSize = 8
+				rankBadge.Text = if item.maxRank and item.maxRank > 1 then string.format("%d/%d", item.rank, item.maxRank) else tostring(item.rank)
+				rankBadge.ZIndex = 3
+				rankBadge.Parent = box
+
+				local rCorner = Instance.new("UICorner")
+				rCorner.CornerRadius = UDim.new(0, 3)
+				rCorner.Parent = rankBadge
+			end
+		else
+			-- Empty Slot (slot-empty in Unity): Dark sleek frame ready to receive an item
+			box.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
+			bStroke.Color = Color3.fromRGB(45, 55, 75)
+			bStroke.Transparency = 0.65
 		end
 	end
 end
@@ -1319,40 +1340,39 @@ local prevHP: number? = nil
 Remotes.GetEvent("MetaSync").OnClientEvent:Connect(function(data: any)
 	if not data then return end
 
-	if data.weaponSlots then
-		cachedMaxWeaponSlots = data.weaponSlots
-	end
-	if data.passiveSlots then
-		cachedMaxPassiveSlots = data.passiveSlots
-	end
+	if data.totalXP ~= nil then cachedTotalXP = data.totalXP end
+	if data.maxTimelineXP ~= nil then cachedMaxTimelineXP = data.maxTimelineXP end
+	if data.nextUpcomingXP ~= nil then cachedNextUpcomingXP = data.nextUpcomingXP end
+	if data.weaponSlots ~= nil then cachedMaxWeaponSlots = data.weaponSlots end
+	if data.passiveSlots ~= nil then cachedMaxPassiveSlots = data.passiveSlots end
+	if data.statSlots ~= nil then cachedMaxStatSlots = data.statSlots end
+	if data.maxWeaponRank ~= nil then cachedMaxWeaponRank = data.maxWeaponRank end
+	if data.maxStatRank ~= nil then cachedMaxStatRank = data.maxStatRank end
 
-	if data.globalLevel then
-		metaLevelLabel.Text = string.format("★ GLOBAL : NIV. %d", data.globalLevel)
-	end
+	metaLevelLabel.Text = string.format("ADN : %d XP", cachedTotalXP)
+	local ratio = math.clamp(cachedTotalXP / cachedMaxTimelineXP, 0, 1)
+	metaXPBarFill.Size = UDim2.new(ratio, 0, 1, 0)
+	metaXPText.Text = string.format("%d / %d ADN", cachedTotalXP, cachedMaxTimelineXP)
 
-	if data.globalXP ~= nil and data.xpToNextLevel then
-		local ratio = math.clamp(data.globalXP / data.xpToNextLevel, 0, 1)
-		metaXPBarFill.Size = UDim2.new(ratio, 0, 1, 0)
-		metaXPText.Text = string.format("%.0f / %.0f EXP", data.globalXP, data.xpToNextLevel)
-	end
-
-	metaSlotsLabel.Text = string.format("SLOTS : %d/6 ARM | %d/6 PAS", cachedMaxWeaponSlots, cachedMaxPassiveSlots)
+	metaSlotsLabel.Text = string.format("SLOTS : %d ARM | %d PAS | %d STAT", cachedMaxWeaponSlots, cachedMaxPassiveSlots, cachedMaxStatSlots)
 
 	-- Refresh slot renderings with updated unlock boundaries
-	populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), cachedLastWeaponList, cachedMaxWeaponSlots, { [5] = 3, [6] = 5 })
-	populateRowSlots(passiveSlots, 6, Color3.fromRGB(200, 150, 255), cachedLastPassiveList, cachedMaxPassiveSlots, { [5] = 2, [6] = 4 })
-	populateRowSlots(statSlots, 6, Color3.fromRGB(50, 255, 120), cachedLastStatList, 6, nil)
+	populateRowSlots(weaponSlots, cachedMaxWeaponSlots, Color3.fromRGB(255, 80, 80), cachedLastWeaponList)
+	populateRowSlots(passiveSlots, cachedMaxPassiveSlots, Color3.fromRGB(200, 150, 255), cachedLastPassiveList)
+	populateRowSlots(statSlots, cachedMaxStatSlots, Color3.fromRGB(50, 255, 120), cachedLastStatList)
 end)
 
 Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	if data.isDead then
 		gameOverModal.Visible = true
 		goStatsText.Text = string.format(
-			"• Vagues tenues : Vague %d\n• Niveau de combat : Niv. %s\n• Emplacements : %d Armes | %d Passifs\n• EXP de compte : Enregistré avec succès !",
+			"• Vagues tenues : Vague %d\n• Niveau de combat : Niv. %s\n• Emplacements : %d Armes | %d Passifs | %d Stats\n• ADN de compte : %d XP enregistré !",
 			currentSurvivingWave,
 			levelBadge.Text,
 			cachedMaxWeaponSlots,
-			cachedMaxPassiveSlots
+			cachedMaxPassiveSlots,
+			cachedMaxStatSlots,
+			cachedTotalXP
 		)
 	end
 
@@ -1408,48 +1428,83 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		waveInfoLabel.Text = string.format("VAGUE %d (%ds) | %d ENNEMIS", data.wave, data.waveTimer or 0, data.activeEnemies or 0)
 	end
 
-	-- Populate 3-Row Inventory Slots
+	-- Populate 3-Row Inventory Slots (Faithful to Unity UIManager.cs)
 	if data.weapons then
-		local wList: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
+		local wList: { { name: string, rank: number, maxRank: number?, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
+		local hasTemp = false
+		local tempIcon = nil
+		local tempIconFile = nil
+
 		for wId, rank in pairs(data.weapons) do
 			local wDef = WeaponsData.GetWeapon(wId)
-			table.insert(wList, {
-				name = if wDef then wDef.name else wId,
-				rank = rank,
-				tag = if wDef and wDef.tag then string.gsub(wDef.tag, "[%[%]%s]", "") else string.sub(wId, 1, 4):upper(),
-				icon = if wDef then wDef.icon else nil,
-				iconFile = if wDef then wDef.iconFile else nil,
-			})
+			if wId == "StarterGun" then
+				hasTemp = true
+				tempIcon = if wDef then wDef.icon else nil
+				tempIconFile = if wDef then wDef.iconFile else nil
+			else
+				table.insert(wList, {
+					name = if wDef then wDef.name else wId,
+					rank = rank,
+					maxRank = cachedMaxWeaponRank,
+					tag = if wDef and wDef.tag then string.gsub(wDef.tag, "[%[%]%s]", "") else string.sub(wId, 1, 4):upper(),
+					icon = if wDef then wDef.icon else nil,
+					iconFile = if wDef then wDef.iconFile else nil,
+				})
+			end
 		end
+
 		cachedLastWeaponList = wList
-		populateRowSlots(weaponSlots, 6, Color3.fromRGB(255, 80, 80), wList, cachedMaxWeaponSlots, { [5] = 3, [6] = 5 })
+		cachedHasTempWeapon = hasTemp
+
+		-- Display separate Starter Gun box matching Unity tempWeaponBox
+		if hasTemp then
+			tempWeaponBox.Visible = true
+			weaponSlots.Position = UDim2.new(0, 110, 0, 0)
+			local res = resolveTexture(tempIconFile, tempIcon)
+			if res and res ~= "" then
+				twbIcon.Image = res
+				twbTag.Visible = false
+			else
+				twbTag.Visible = true
+			end
+		else
+			tempWeaponBox.Visible = false
+			weaponSlots.Position = UDim2.new(0, 75, 0, 0)
+		end
+
+		populateRowSlots(weaponSlots, cachedMaxWeaponSlots, Color3.fromRGB(255, 80, 80), wList)
 	end
 
 	if data.passives then
-		local pList: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
+		local pList: { { name: string, rank: number, maxRank: number?, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
 		for _, p in ipairs(data.passives) do
 			table.insert(pList, {
 				name = p.name or "Passif",
 				rank = 1,
+				maxRank = 1,
 				tag = "PASF",
 				icon = p.icon,
 				iconFile = p.iconFile,
 			})
 		end
 		cachedLastPassiveList = pList
-		populateRowSlots(passiveSlots, 6, Color3.fromRGB(200, 150, 255), pList, cachedMaxPassiveSlots, { [5] = 2, [6] = 4 })
+		populateRowSlots(passiveSlots, cachedMaxPassiveSlots, Color3.fromRGB(200, 150, 255), pList)
 	end
 
 	if data.stats then
-		local sList: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
-		local statEntries = { "MaxHP", "Speed", "DamageMultiplier", "Armor", "LifeSteal", "RangeMultiplier" }
+		local sList: { { name: string, rank: number, maxRank: number?, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
+		local statCardLevels = data.statCardLevels or {}
+		local statEntries = { "MaxHP", "Speed", "DamageMultiplier", "FireRateMultiplier", "Armor", "CriticalChance", "PickupRadius", "LifeSteal", "BurnDamage", "RangeMultiplier" }
+
 		for _, sKey in ipairs(statEntries) do
-			if data.stats[sKey] then
+			local currentLvl = statCardLevels[sKey]
+			if currentLvl and currentLvl > 0 then
 				local conf = StatTypes.STAT_CONFIG[sKey]
 				local tag = if conf and conf.tag then string.gsub(conf.tag, "[%[%]%s]", "") else string.sub(sKey, 1, 4):upper()
 				table.insert(sList, {
 					name = sKey,
-					rank = math.floor(data.stats[sKey]),
+					rank = currentLvl,
+					maxRank = cachedMaxStatRank,
 					tag = tag,
 					icon = if conf then conf.icon else nil,
 					iconFile = if conf then conf.iconFile else nil,
@@ -1457,6 +1512,6 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 			end
 		end
 		cachedLastStatList = sList
-		populateRowSlots(statSlots, 6, Color3.fromRGB(50, 255, 120), sList, 6, nil)
+		populateRowSlots(statSlots, cachedMaxStatSlots, Color3.fromRGB(50, 255, 120), sList)
 	end
 end)

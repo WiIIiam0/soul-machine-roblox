@@ -81,16 +81,25 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 	local meta = MetaProgressionService.GetPlayerMeta(player)
 	local maxWeaponSlots = meta.weaponSlots
 	local maxPassiveSlots = meta.passiveSlots
+	local maxStatSlots = meta.statSlots
+	local maxWeaponRank = meta.maxWeaponRank
+	local maxStatRank = meta.maxStatRank
 
 	local equippedWeapons = WeaponService.GetPlayerWeapons(player)
+	local numRealWeapons = 0
+	for wId in pairs(equippedWeapons) do
+		if wId ~= "StarterGun" then
+			numRealWeapons += 1
+		end
+	end
 
-	-- 1. Try to generate at least 1 weapon card (either upgrade an existing or offer new)
+	-- 1. WEAPONS POOL
 	local possibleWeaponCards: { RewardCard } = {}
 
-	-- Upgrades first
+	-- Upgrades first (capped by maxWeaponRank)
 	for weaponId, rank in pairs(equippedWeapons) do
 		local wDef = WeaponsData.GetWeapon(weaponId)
-		if wDef and rank < #wDef.ranks then
+		if wDef and rank < maxWeaponRank and rank < #wDef.ranks then
 			local nextRank = wDef.ranks[rank + 1]
 			table.insert(possibleWeaponCards, {
 				id = "WUpgrade_" .. weaponId,
@@ -108,13 +117,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		end
 	end
 
-	-- New weapons (only if player has not reached their unlocked slot capacity)
-	local numWeapons = 0
-	for _ in pairs(equippedWeapons) do numWeapons += 1 end
-
-	if numWeapons < maxWeaponSlots then
+	-- New weapons (only if player has free weapon slots according to meta)
+	if numRealWeapons < maxWeaponSlots then
 		for _, wId in ipairs(WEAPON_IDS) do
-			if not equippedWeapons[wId] and MetaProgressionData.IsWeaponUnlocked(meta.level, wId) then
+			if wId ~= "StarterGun" and not equippedWeapons[wId] and MetaProgressionData.IsWeaponUnlocked(meta.totalXP, wId) then
 				local wDef = WeaponsData.GetWeapon(wId)
 				if wDef and #wDef.ranks > 0 then
 					table.insert(possibleWeaponCards, {
@@ -140,79 +146,125 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		table.insert(cards, chosen)
 	end
 
-	-- 2. Stat Upgrade Card
-	local statType = STAT_LIST[rng:NextInteger(1, #STAT_LIST)]
-	local conf = StatTypes.STAT_CONFIG[statType]
-	local bonus = conf.perLevelBonus
+	-- 2. STATS POOL (Faithful to RewardManager.cs lines 280-324)
+	local ownedStatLevels = PlayerStatsManager.GetStatCardLevels(player)
+	local ownedUniqueStats = 0
+	for _ in pairs(ownedStatLevels) do ownedUniqueStats += 1 end
 
-	table.insert(cards, {
-		id = "Stat_" .. statType,
-		category = "STAT",
-		title = conf.name,
-		subtitle = conf.format(bonus),
-		description = conf.desc,
-		icon = conf.icon,
-		iconFile = conf.iconFile,
-		tag = conf.tag or "[ MODULE ]",
-		glyph = conf.tag or "[ MODULE ]",
-		rarityColor = Color3.fromRGB(80, 255, 140),
-		statType = statType,
-		statValue = bonus,
-	})
+	local possibleStatCards: { RewardCard } = {}
+	for _, sKey in ipairs(STAT_LIST) do
+		local conf = StatTypes.STAT_CONFIG[sKey]
+		if conf then
+			local currentLevel = ownedStatLevels[sKey]
+			if currentLevel ~= nil then
+				-- Stat already owned: can upgrade if currentLevel < maxStatRank
+				if currentLevel < maxStatRank then
+					local bonus = conf.perLevelBonus
+					table.insert(possibleStatCards, {
+						id = "Stat_" .. sKey .. "_" .. (currentLevel + 1),
+						category = "STAT",
+						title = string.format("%s (NIV. %d)", conf.name, currentLevel + 1),
+						subtitle = conf.format(bonus),
+						description = conf.desc,
+						icon = conf.icon,
+						iconFile = conf.iconFile,
+						tag = conf.tag or "[ MODULE ]",
+						glyph = conf.tag or "[ MODULE ]",
+						rarityColor = Color3.fromRGB(80, 255, 140),
+						statType = sKey,
+						statValue = bonus,
+					})
+				end
+			elseif ownedUniqueStats < maxStatSlots and MetaProgressionData.IsStatUnlocked(meta.totalXP, sKey) then
+				-- New stat: only if player has free stat slot according to meta
+				local bonus = conf.perLevelBonus
+				table.insert(possibleStatCards, {
+					id = "Stat_" .. sKey .. "_1",
+					category = "STAT",
+					title = conf.name,
+					subtitle = conf.format(bonus),
+					description = conf.desc,
+					icon = conf.icon,
+					iconFile = conf.iconFile,
+					tag = conf.tag or "[ MODULE ]",
+					glyph = conf.tag or "[ MODULE ]",
+					rarityColor = Color3.fromRGB(80, 255, 140),
+					statType = sKey,
+					statValue = bonus,
+				})
+			end
+		end
+	end
 
-	-- 3. Passive or Extra Card (if player has not reached their unlocked passive slot capacity)
+	if #possibleStatCards > 0 then
+		local chosen = table.remove(possibleStatCards, rng:NextInteger(1, #possibleStatCards))
+		table.insert(cards, chosen)
+	end
+
+	-- 3. PASSIVE POOL (Faithful to RewardManager.cs & PassiveManager.cs)
 	local equippedPassives = PassiveService.GetPlayerPassives(player)
 	local numPassives = #equippedPassives
 	local canOfferPassive = numPassives < maxPassiveSlots
 
-	if canOfferPassive and rng:NextNumber() < 0.65 then
-		-- Procedural or premade passive filtered by global unlock level
-		local passDef: PassivesData.PassiveDefinition
-		local unlockedPremades: { PassivesData.PassiveDefinition } = {}
+	local possiblePassiveCards: { RewardCard } = {}
+	if canOfferPassive then
 		for _, p in ipairs(PassivesData.PREMADE_PASSIVES) do
-			if MetaProgressionData.IsPassiveUnlocked(meta.level, p.id) then
-				table.insert(unlockedPremades, p)
+			if MetaProgressionData.IsPassiveUnlocked(meta.totalXP, p.id) then
+				local alreadyOwned = false
+				for _, eq in ipairs(equippedPassives) do
+					if eq.id == p.id then
+						alreadyOwned = true
+						break
+					end
+				end
+				if not alreadyOwned then
+					table.insert(possiblePassiveCards, {
+						id = "Passive_" .. p.id,
+						category = "PASSIVE",
+						title = p.name,
+						subtitle = "MODULE PASSIF RÉACTIF",
+						description = p.description,
+						icon = p.icon,
+						iconFile = p.iconFile,
+						tag = "[ PASSIF ]",
+						glyph = getPassiveGlyph(p),
+						rarityColor = Color3.fromRGB(220, 80, 255),
+						passiveDef = p,
+					})
+				end
 			end
 		end
+	end
 
-		if #unlockedPremades > 0 and rng:NextNumber() < 0.5 then
-			passDef = unlockedPremades[rng:NextInteger(1, #unlockedPremades)]
-		else
-			passDef = PassivesData.GenerateProceduralPassive(math.random(1, 999999))
-		end
+	if #possiblePassiveCards > 0 and rng:NextNumber() < 0.65 then
+		local chosen = table.remove(possiblePassiveCards, rng:NextInteger(1, #possiblePassiveCards))
+		table.insert(cards, chosen)
+	elseif #possibleStatCards > 0 then
+		local chosen = table.remove(possibleStatCards, rng:NextInteger(1, #possibleStatCards))
+		table.insert(cards, chosen)
+	elseif #possibleWeaponCards > 0 then
+		local chosen = table.remove(possibleWeaponCards, rng:NextInteger(1, #possibleWeaponCards))
+		table.insert(cards, chosen)
+	end
 
+	-- Guaranteed fallback if less than 3 choices
+	while #cards < 3 do
+		local fallbackStat = STAT_LIST[rng:NextInteger(1, #STAT_LIST)]
+		local fbConf = StatTypes.STAT_CONFIG[fallbackStat]
+		local fbBonus = fbConf.perLevelBonus
 		table.insert(cards, {
-			id = "Passive_" .. passDef.id,
-			category = "PASSIVE",
-			title = passDef.name,
-			subtitle = "MODULE PASSIF RÉACTIF",
-			description = passDef.description,
-			icon = passDef.icon,
-			iconFile = passDef.iconFile,
-			tag = "[ PASSIF ]",
-			glyph = getPassiveGlyph(passDef),
-			rarityColor = Color3.fromRGB(220, 80, 255),
-			passiveDef = passDef,
-		})
-	else
-		-- Second Stat or Weapon Card
-		local secondStat = STAT_LIST[rng:NextInteger(1, #STAT_LIST)]
-		local sConf = StatTypes.STAT_CONFIG[secondStat]
-		local sBonus = sConf.perLevelBonus
-
-		table.insert(cards, {
-			id = "Stat2_" .. secondStat,
+			id = "FallbackStat_" .. fallbackStat .. "_" .. #cards,
 			category = "STAT",
-			title = sConf.name,
-			subtitle = sConf.format(sBonus),
-			description = sConf.desc,
-			icon = sConf.icon,
-			iconFile = sConf.iconFile,
-			tag = sConf.tag or "[ MODULE ]",
-			glyph = sConf.tag or "[ MODULE ]",
+			title = fbConf.name,
+			subtitle = fbConf.format(fbBonus),
+			description = fbConf.desc,
+			icon = fbConf.icon,
+			iconFile = fbConf.iconFile,
+			tag = fbConf.tag or "[ MODULE ]",
+			glyph = fbConf.tag or "[ MODULE ]",
 			rarityColor = Color3.fromRGB(80, 255, 140),
-			statType = secondStat,
-			statValue = sBonus,
+			statType = fallbackStat,
+			statValue = fbBonus,
 		})
 	end
 

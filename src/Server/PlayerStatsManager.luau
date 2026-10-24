@@ -20,6 +20,7 @@ export type PlayerData = {
 	overdriveEndTime: number,
 	baseStats: StatTypes.PlayerStats,
 	statBonuses: { [StatTypes.StatType]: number },
+	statCardLevels: { [string]: number },
 	currentStats: StatTypes.PlayerStats,
 	isDead: boolean,
 	isLevelUpPhase: boolean,
@@ -52,6 +53,7 @@ function PlayerStatsManager.InitPlayer(player: Player): PlayerData
 			BurnDamage = 0,
 			RangeMultiplier = 0,
 		},
+		statCardLevels = {},
 		currentStats = StatTypes.CloneStats(base),
 		isDead = false,
 		isLevelUpPhase = false,
@@ -112,8 +114,15 @@ function PlayerStatsManager.AddStat(player: Player, statType: StatTypes.StatType
 	if not data then return end
 
 	data.statBonuses[statType] = (data.statBonuses[statType] or 0) + amount
+	data.statCardLevels[statType] = (data.statCardLevels[statType] or 0) + 1
 	PlayerStatsManager.RecalculateStats(player)
 	GameEvents.OnGainStat:Fire(player, statType, amount)
+end
+
+function PlayerStatsManager.GetStatCardLevels(player: Player): { [string]: number }
+	local data = playerDataMap[player]
+	if not data then return {} end
+	return data.statCardLevels
 end
 
 function PlayerStatsManager.SetLevelUpPhase(player: Player, active: boolean)
@@ -245,6 +254,7 @@ function PlayerStatsManager.SyncToClient(player: Player)
 		isOverdriveActive = data.isOverdriveActive,
 		isDead = data.isDead,
 		stats = data.currentStats,
+		statCardLevels = data.statCardLevels,
 	})
 end
 

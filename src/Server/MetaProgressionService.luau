@@ -1,24 +1,26 @@
 --!strict
--- MetaProgressionService.luau: Manages account-wide persistent level, unlocks, slot capacity, and global XP
+-- MetaProgressionService.luau: Manages account-wide persistent totalXP (ADN), slot capacity, and unlock timeline
+-- 100% faithful port of Unity MetaProgressionManager.cs
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
-local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local MetaProgressionData = require(Shared:WaitForChild("MetaProgressionData"))
 local GameEvents = require(Shared:WaitForChild("GameEvents"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
-local DATA_STORE_NAME = "SoulMachine_Meta_v2"
+local DATA_STORE_NAME = "SoulMachine_Meta_v3"
 
 export type PlayerMetaState = {
-	level: number,
-	xp: number,
-	xpToNextLevel: number,
+	totalXP: number,
+	startingXP: number,
 	weaponSlots: number,
 	passiveSlots: number,
+	statSlots: number,
+	maxWeaponRank: number,
+	maxStatRank: number,
 	totalRuns: number,
 	totalKills: number,
 	sessionXP: number,
@@ -41,17 +43,28 @@ else
 	warn("[MetaProgressionService] DataStore access not available (Studio/offline). Using in-memory fallback.")
 end
 
+local function recalculateStateCaps(state: PlayerMetaState)
+	state.weaponSlots = MetaProgressionData.GetMaxWeaponSlots(state.totalXP)
+	state.passiveSlots = MetaProgressionData.GetMaxPassiveSlots(state.totalXP)
+	state.statSlots = MetaProgressionData.GetMaxStatSlots(state.totalXP)
+	state.maxWeaponRank = MetaProgressionData.GetMaxWeaponRank(state.totalXP)
+	state.maxStatRank = MetaProgressionData.GetMaxStatRank(state.totalXP)
+end
+
 function MetaProgressionService.InitPlayer(player: Player)
 	local defaultState: PlayerMetaState = {
-		level = 1,
-		xp = 0,
-		xpToNextLevel = MetaProgressionData.GetXPForLevel(1),
-		weaponSlots = MetaProgressionData.GetWeaponSlots(1),
-		passiveSlots = MetaProgressionData.GetPassiveSlots(1),
+		totalXP = 0,
+		startingXP = 0,
+		weaponSlots = 1,
+		passiveSlots = 1,
+		statSlots = 1,
+		maxWeaponRank = 1,
+		maxStatRank = 3,
 		totalRuns = 0,
 		totalKills = 0,
 		sessionXP = 0,
 	}
+	recalculateStateCaps(defaultState)
 
 	if dataStoreAvailable and metaStore then
 		local key = "Player_" .. tostring(player.UserId)
@@ -60,16 +73,13 @@ function MetaProgressionService.InitPlayer(player: Player)
 		end)
 
 		if loadSuccess and data and type(data) == "table" then
-			local level = math.max(1, tonumber(data.level) or 1)
-			local xp = math.max(0, tonumber(data.xp) or 0)
-			defaultState.level = level
-			defaultState.xp = xp
-			defaultState.xpToNextLevel = MetaProgressionData.GetXPForLevel(level)
-			defaultState.weaponSlots = MetaProgressionData.GetWeaponSlots(level)
-			defaultState.passiveSlots = MetaProgressionData.GetPassiveSlots(level)
+			local xp = math.max(0, tonumber(data.totalXP) or tonumber(data.xp) or 0)
+			defaultState.totalXP = xp
+			defaultState.startingXP = xp
 			defaultState.totalRuns = (tonumber(data.totalRuns) or 0) + 1
 			defaultState.totalKills = tonumber(data.totalKills) or 0
-			print(string.format("[MetaProgressionService] Loaded data for %s: Niv. %d (%d XP)", player.Name, level, xp))
+			recalculateStateCaps(defaultState)
+			print(string.format("[MetaProgressionService] Loaded progression for %s: %d ADN XP (Slots: %d ARM, %d PAS, %d STAT)", player.Name, xp, defaultState.weaponSlots, defaultState.passiveSlots, defaultState.statSlots))
 		else
 			print(string.format("[MetaProgressionService] No previous save or new player for %s, starting fresh.", player.Name))
 		end
@@ -84,46 +94,51 @@ function MetaProgressionService.GetPlayerMeta(player: Player): PlayerMetaState
 	if state then
 		return state
 	end
-	return {
-		level = 1,
-		xp = 0,
-		xpToNextLevel = MetaProgressionData.GetXPForLevel(1),
-		weaponSlots = 4,
-		passiveSlots = 4,
+	local fallback: PlayerMetaState = {
+		totalXP = 0,
+		startingXP = 0,
+		weaponSlots = 1,
+		passiveSlots = 1,
+		statSlots = 1,
+		maxWeaponRank = 1,
+		maxStatRank = 3,
 		totalRuns = 1,
 		totalKills = 0,
 		sessionXP = 0,
 	}
+	recalculateStateCaps(fallback)
+	return fallback
 end
 
 function MetaProgressionService.AddGlobalXP(player: Player, amount: number, source: string)
 	local state = playerMetaMap[player]
 	if not state then return end
 
-	state.xp += amount
+	local oldXP = state.totalXP
+	state.totalXP += amount
 	state.sessionXP += amount
 
-	local didLevelUp = false
-	while state.xp >= state.xpToNextLevel do
-		state.xp -= state.xpToNextLevel
-		state.level += 1
-		state.xpToNextLevel = MetaProgressionData.GetXPForLevel(state.level)
-		state.weaponSlots = MetaProgressionData.GetWeaponSlots(state.level)
-		state.passiveSlots = MetaProgressionData.GetPassiveSlots(state.level)
-		didLevelUp = true
+	local oldWeaponSlots = state.weaponSlots
+	local oldPassiveSlots = state.passiveSlots
+	local oldStatSlots = state.statSlots
 
-		local unlockInfo = MetaProgressionData.GetUnlockInfoForLevel(state.level)
-		print(string.format("[MetaProgressionService] ★ GLOBAL LEVEL UP! %s reached Global Level %d! Unlocks: %s", player.Name, state.level, unlockInfo and unlockInfo.description or "None"))
+	recalculateStateCaps(state)
+
+	local newlyUnlocked = MetaProgressionData.GetNewlyUnlockedItems(oldXP, state.totalXP)
+	if #newlyUnlocked > 0 then
+		for _, item in ipairs(newlyUnlocked) do
+			print(string.format("[MetaProgressionService] ★ UNLOCK REACHED for %s! %s (at %d ADN)", player.Name, item.description or item.unlockName, item.requiredXP))
+		end
 
 		Remotes.GetEvent("GlobalLevelUp"):FireClient(player, {
-			newLevel = state.level,
-			unlockInfo = unlockInfo,
+			totalXP = state.totalXP,
+			newlyUnlocked = newlyUnlocked,
 		})
 	end
 
 	MetaProgressionService.SyncMeta(player)
 
-	if didLevelUp then
+	if #newlyUnlocked > 0 or state.sessionXP >= 20 then
 		MetaProgressionService.SavePlayer(player)
 	end
 end
@@ -133,16 +148,18 @@ function MetaProgressionService.SyncMeta(player: Player)
 	if not state then return end
 
 	Remotes.GetEvent("MetaSync"):FireClient(player, {
-		globalLevel = state.level,
-		globalXP = state.xp,
-		xpToNextLevel = state.xpToNextLevel,
+		totalXP = state.totalXP,
+		startingXP = state.startingXP,
 		weaponSlots = state.weaponSlots,
 		passiveSlots = state.passiveSlots,
+		statSlots = state.statSlots,
+		maxWeaponRank = state.maxWeaponRank,
+		maxStatRank = state.maxStatRank,
+		maxTimelineXP = MetaProgressionData.GetMaxTimelineXP(),
+		nextUpcomingXP = MetaProgressionData.GetNextUpcomingXP(),
 		totalRuns = state.totalRuns,
 		totalKills = state.totalKills,
 		sessionXP = state.sessionXP,
-		unlockedWeapons = MetaProgressionData.GetAllUnlockedWeapons(state.level),
-		unlockedPassives = MetaProgressionData.GetAllUnlockedPassives(state.level),
 	})
 end
 
@@ -152,8 +169,7 @@ function MetaProgressionService.SavePlayer(player: Player)
 
 	local key = "Player_" .. tostring(player.UserId)
 	local payload = {
-		level = state.level,
-		xp = state.xp,
+		totalXP = state.totalXP,
 		totalRuns = state.totalRuns,
 		totalKills = state.totalKills,
 		lastSaved = os.time(),
@@ -180,7 +196,7 @@ Players.PlayerRemoving:Connect(MetaProgressionService.Cleanup)
 -- Listen to Game Events to award Global XP automatically
 GameEvents.OnWaveCompleted:Connect(function(waveNum: number)
 	for _, player in ipairs(Players:GetPlayers()) do
-		MetaProgressionService.AddGlobalXP(player, 40 + (waveNum * 5), "WaveCompleted")
+		MetaProgressionService.AddGlobalXP(player, 10 + (waveNum * 2), "WaveCompleted")
 	end
 end)
 
@@ -194,9 +210,9 @@ GameEvents.OnEnemyKilled:Connect(function(enemyData: any, killerPlayer: Player?)
 		local amount = 1
 		if enemyData and enemyData.config then
 			if enemyData.config.isBoss then
-				amount = 100
+				amount = 25
 			elseif enemyData.config.isMetaEnemy then
-				amount = 15
+				amount = 5
 			end
 		end
 		MetaProgressionService.AddGlobalXP(killerPlayer, amount, "EnemyKill")
@@ -205,8 +221,8 @@ end)
 
 GameEvents.OnXPCollected:Connect(function(player: Player, amount: number, isMeta: boolean)
 	if isMeta then
-		-- Meta Gem collected gives substantial permanent account progression
-		MetaProgressionService.AddGlobalXP(player, 15, "MetaGem")
+		-- Meta Gem collected gives 1 ADN XP directly (matches MetaXPGem.cs metaXpValue = 1)
+		MetaProgressionService.AddGlobalXP(player, 1, "MetaGem")
 	end
 end)
 
