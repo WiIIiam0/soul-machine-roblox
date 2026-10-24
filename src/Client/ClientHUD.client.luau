@@ -200,6 +200,8 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 		return textureCache[cleanLower]
 	end
 
+	local numMatch = string.match(cleanLower, "%d+_%d+$") or string.match(cleanLower, "%d+$")
+
 	-- 1. Direct fast lookup in common containers
 	local candidates = {
 		ReplicatedStorage:FindFirstChild("Icons"),
@@ -218,6 +220,7 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 				local tex = extractTextureString(found)
 				if tex then
 					textureCache[cleanLower] = tex
+					print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, found:GetFullName()))
 					return tex
 				end
 			end
@@ -227,10 +230,11 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 	-- 2. Scan ReplicatedStorage descendants
 	for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
-		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) then
+		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
+				print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, desc:GetFullName()))
 				return tex
 			end
 		end
@@ -239,10 +243,11 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 	-- 3. Scan Workspace descendants
 	for _, desc in ipairs(Workspace:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
-		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) then
+		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
+				print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, desc:GetFullName()))
 				return tex
 			end
 		end
@@ -251,10 +256,11 @@ local function resolveTexture(iconFile: string?, rawIcon: string?): string?
 	-- 4. Check playerGui descendants
 	for _, desc in ipairs(playerGui:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
-		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) then
+		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
+				print(string.format("[ClientHUD] Icon resolved for '%s': %s (from %s)", cleanName, tex, desc:GetFullName()))
 				return tex
 			end
 		end
