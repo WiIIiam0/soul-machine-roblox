@@ -3,6 +3,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local PassivesData = require(Shared:WaitForChild("PassivesData"))
@@ -19,6 +20,8 @@ export type PlayerPassiveState = {
 
 local PassiveService = {}
 local playerPassiveStates: { [Player]: PlayerPassiveState } = {}
+local playerLastPositions: { [Player]: Vector3 } = {}
+local playerStandTimers: { [Player]: number } = {}
 
 function PassiveService.InitPlayer(player: Player)
 	local state: PlayerPassiveState = {
@@ -38,6 +41,8 @@ function PassiveService.InitPlayer(player: Player)
 		currentThresholds = {},
 	}
 	playerPassiveStates[player] = state
+	playerLastPositions[player] = nil
+	playerStandTimers[player] = 0
 end
 
 function PassiveService.AddPassive(player: Player, passive: PassivesData.PassiveDefinition)
@@ -153,8 +158,48 @@ GameEvents.OnXPCollected:Connect(function(player, amount, isMeta)
 	feedTrigger(player, "OnGainXP", amount)
 end)
 
+GameEvents.OnMove:Connect(function(player: Player, distanceTraveled: number)
+	feedTrigger(player, "OnMove", distanceTraveled)
+end)
+
+GameEvents.OnStandStill:Connect(function(player: Player, duration: number)
+	feedTrigger(player, "OnStandStill", duration)
+end)
+
+-- Track physical mecha movement and immobility to feed OnMove and OnStandStill passives
+RunService.Heartbeat:Connect(function(dt: number)
+	for player, _ in pairs(playerPassiveStates) do
+		local char = player.Character
+		if char then
+			local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if hrp then
+				local pos = hrp.Position
+				local prevPos = playerLastPositions[player]
+				if prevPos then
+					local dist = (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(prevPos.X, 0, prevPos.Z)).Magnitude
+					if dist > 0.08 then
+						GameEvents.OnMove:Fire(player, dist)
+						playerStandTimers[player] = 0
+					else
+						local stand = (playerStandTimers[player] or 0) + dt
+						if stand >= 1.0 then
+							GameEvents.OnStandStill:Fire(player, 1.0)
+							playerStandTimers[player] = 0
+						else
+							playerStandTimers[player] = stand
+						end
+					end
+				end
+				playerLastPositions[player] = pos
+			end
+		end
+	end
+end)
+
 function PassiveService.Cleanup(player: Player)
 	playerPassiveStates[player] = nil
+	playerLastPositions[player] = nil
+	playerStandTimers[player] = nil
 end
 
 Players.PlayerRemoving:Connect(PassiveService.Cleanup)
