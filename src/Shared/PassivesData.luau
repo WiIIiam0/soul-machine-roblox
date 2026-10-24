@@ -34,6 +34,7 @@ export type PassiveDefinition = {
 	threshold: number,
 	effectPower: number,
 	icon: string,
+	iconFile: string,
 }
 
 local PassivesData = {}
@@ -76,6 +77,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 8,
 		effectPower = 12,
 		icon = "rbxassetid://10709791480",
+		iconFile = "CSFSimpleSkill3_C_256_09.png",
 	},
 	{
 		id = "KineticCapacitor",
@@ -86,6 +88,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 75,
 		effectPower = 15,
 		icon = "rbxassetid://10709791130",
+		iconFile = "CSFSimpleSkill3_C_256_04.png",
 	},
 	{
 		id = "EmergencyReactor",
@@ -96,6 +99,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 30,
 		effectPower = 20,
 		icon = "rbxassetid://10709791612",
+		iconFile = "CSFSimpleSkill3_C_256_10.png",
 	},
 	{
 		id = "SiegeModule",
@@ -106,6 +110,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 3,
 		effectPower = 0.03,
 		icon = "rbxassetid://10709791281",
+		iconFile = "CSFSimpleSkill3_C_256_08.png",
 	},
 	{
 		id = "OverdriveSurge",
@@ -116,6 +121,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 1,
 		effectPower = 25,
 		icon = "rbxassetid://10709791437",
+		iconFile = "CSFSimpleSkill3_C_256_41.png",
 	},
 	{
 		id = "ScavengerNanites",
@@ -126,6 +132,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 10,
 		effectPower = 2,
 		icon = "rbxassetid://10709791054",
+		iconFile = "CSFSimpleSkill3_C_256_07.png",
 	},
 	{
 		id = "HyperchargeCrit",
@@ -136,6 +143,7 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 4,
 		effectPower = 0.03,
 		icon = "rbxassetid://10709791223",
+		iconFile = "CSFSimpleSkill3_C_256_06.png",
 	},
 	{
 		id = "ArmoredReinforcement",
@@ -146,9 +154,36 @@ local PREMADE_PASSIVES: { PassiveDefinition } = {
 		threshold = 120,
 		effectPower = 4,
 		icon = "rbxassetid://10709791281",
+		iconFile = "CSFSimpleSkill3_C_256_05.png",
 	},
 }
 PassivesData.PREMADE_PASSIVES = PREMADE_PASSIVES
+
+local TRIGGER_PREFIXES: { [TriggerCondition]: string } = {
+	OnEnemyKilled = "Exterminateur",
+	OnDamageDealt = "Percuteur",
+	OnDamageTaken = "Riposte",
+	OnHeal = "Régénérateur",
+	OnMove = "Cinétique",
+	OnStandStill = "Bunker",
+	OnCritHit = "Précision",
+	OnLevelUp = "Évolution",
+	OnOverdrive = "Surtension",
+	OnGainXP = "Moissonneur",
+}
+
+local EFFECT_SUFFIXES: { [PassiveEffect]: { name: string, iconFile: string } } = {
+	Heal = { name = "de Réparation", iconFile = "CSFSimpleSkill3_C_256_01.png" },
+	GainMaxHP = { name = "de Vitalité", iconFile = "CSFSimpleSkill3_C_256_01.png" },
+	GainStatDamage = { name = "de Puissance", iconFile = "CSFSimpleSkill3_C_256_02.png" },
+	GainStatSpeed = { name = "de Vélocité", iconFile = "CSFSimpleSkill3_C_256_04.png" },
+	GainStatFireRate = { name = "de Cadence", iconFile = "CSFSimpleSkill3_C_256_03.png" },
+	GainCritChance = { name = "Létal", iconFile = "CSFSimpleSkill3_C_256_06.png" },
+	GainStatArmor = { name = "de Blindage", iconFile = "CSFSimpleSkill3_C_256_05.png" },
+	GainLifeSteal = { name = "Vampirique", iconFile = "CSFSimpleSkill3_C_256_09.png" },
+	ChargeOverdrive = { name = "Nucléaire", iconFile = "CSFSimpleSkill3_C_256_41.png" },
+	GainXP = { name = "d'Optimisation", iconFile = "CSFSimpleSkill3_C_256_07.png" },
+}
 
 function PassivesData.GenerateProceduralPassive(seed: number): PassiveDefinition
 	local rng = Random.new(seed)
@@ -180,15 +215,20 @@ function PassivesData.GenerateProceduralPassive(seed: number): PassiveDefinition
 
 	local desc = triggerText .. " ➔ " .. effectText
 
+	local prefix = TRIGGER_PREFIXES[chosenTrigger] or "Module"
+	local effData = EFFECT_SUFFIXES[chosenEffect] or { name = "de Réaction", iconFile = "CSFSimpleSkill3_C_256_41.png" }
+	local fullName = string.format("Module %s %s", prefix, effData.name)
+
 	return {
 		id = "ProcPassive_" .. tostring(seed),
-		name = "Module " .. chosenTrigger:gsub("On", "") .. "-" .. chosenEffect:gsub("Gain", ""),
+		name = fullName,
 		description = desc,
 		trigger = chosenTrigger,
 		effect = chosenEffect,
 		threshold = threshold,
 		effectPower = power,
 		icon = "rbxassetid://10709791437",
+		iconFile = effData.iconFile,
 	}
 end
 

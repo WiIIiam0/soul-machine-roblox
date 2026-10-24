@@ -806,13 +806,14 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 	end
 
 	if data.passives then
-		local pList: { { name: string, rank: number, tag: string?, icon: string? } } = {}
+		local pList: { { name: string, rank: number, tag: string?, glyph: string?, icon: string?, iconFile: string? } } = {}
 		for _, p in ipairs(data.passives) do
 			table.insert(pList, {
 				name = p.name or "Passif",
 				rank = 1,
 				tag = "PASF",
 				icon = p.icon,
+				iconFile = p.iconFile,
 			})
 		end
 		populateRowSlots(passiveSlots, 6, Color3.fromRGB(200, 150, 255), pList)

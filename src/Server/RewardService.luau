@@ -172,6 +172,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 			subtitle = "MODULE PASSIF RÉACTIF",
 			description = passDef.description,
 			icon = passDef.icon,
+			iconFile = passDef.iconFile,
 			tag = "[ PASSIF ]",
 			glyph = getPassiveGlyph(passDef),
 			rarityColor = Color3.fromRGB(220, 80, 255),
