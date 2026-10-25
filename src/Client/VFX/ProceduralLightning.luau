@@ -45,7 +45,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 
 	if id == "Taser" then
 		return {
-			segments = 14,
+			segments = 28,
 			amplitude = 1.9,
 			frequency = 8.5,
 			jitterAmp = 0.45,
@@ -58,7 +58,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 		}
 	elseif id == "DarkStorm" then
 		return {
-			segments = 16,
+			segments = 32,
 			amplitude = 2.4,
 			frequency = 12.0,
 			jitterAmp = 0.65,
@@ -71,7 +71,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 		}
 	elseif id == "Rifle" then
 		return {
-			segments = 10,
+			segments = 20,
 			amplitude = 1.0,
 			frequency = 6.0,
 			jitterAmp = 0.25,
@@ -85,7 +85,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 		}
 	elseif id == "Pompe" then
 		return {
-			segments = 6,
+			segments = 12,
 			amplitude = 0.6,
 			frequency = 6.0,
 			jitterAmp = 0.30,
@@ -97,7 +97,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 		}
 	elseif id == "Eventail" then
 		return {
-			segments = 8,
+			segments = 16,
 			amplitude = 0.8,
 			frequency = 7.0,
 			jitterAmp = 0.35,
@@ -110,7 +110,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 		}
 	elseif id == "OverdriveWeapon" then
 		return {
-			segments = 12,
+			segments = 24,
 			amplitude = 1.6,
 			frequency = 10.0,
 			jitterAmp = 0.50,
@@ -123,7 +123,7 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 		}
 	elseif id == "RocketShrapnel" then
 		return {
-			segments = 5,
+			segments = 10,
 			amplitude = 0.5,
 			frequency = 5.0,
 			jitterAmp = 0.25,
@@ -133,10 +133,23 @@ local function getBoltConfig(weaponId: string?, baseColor: Color3?, baseWidth: n
 			lifetime = 0.06,
 			branches = 0,
 		}
+	elseif id == "BurnTransfer" then
+		return {
+			segments = 24,
+			amplitude = 1.4,
+			frequency = 8.0,
+			jitterAmp = 0.35,
+			hasCore = true,
+			coreColor = Color3.fromRGB(255, 230, 80),
+			outerColor = Color3.fromRGB(255, 110, 15),
+			width = 0.36,
+			lifetime = 0.16,
+			branches = 1,
+		}
 	else
 		-- StarterGun or generic instant shot
 		return {
-			segments = 8,
+			segments = 16,
 			amplitude = 0.45,
 			frequency = 5.5,
 			jitterAmp = 0.20,
@@ -237,6 +250,29 @@ function ProceduralLightning.CreateBolt(
 	muzzleLight.Shadows = false
 	muzzleLight.Parent = muzzleFlash
 
+	local lightsToFade: { PointLight } = { muzzleLight }
+
+	-- Mid-trajectory lightning illumination light (lights up ground, player, and nearby enemies)
+	local midPos = (startPos + endPos) * 0.5
+	local boltLightPart = Instance.new("Part")
+	boltLightPart.Name = "BoltIllumination"
+	boltLightPart.Transparency = 1
+	boltLightPart.Size = Vector3.new(0.5, 0.5, 0.5)
+	boltLightPart.Position = midPos
+	boltLightPart.Anchored = true
+	boltLightPart.CanCollide = false
+	boltLightPart.CanTouch = false
+	boltLightPart.CanQuery = false
+	boltLightPart.Parent = model
+
+	local boltLight = Instance.new("PointLight")
+	boltLight.Color = config.outerColor
+	boltLight.Brightness = 4.5
+	boltLight.Range = math.clamp(dist * 0.8, 14, 32)
+	boltLight.Shadows = false
+	boltLight.Parent = boltLightPart
+	table.insert(lightsToFade, boltLight)
+
 	-- 2. Impact point flash
 	local impactFlash = Instance.new("Part")
 	impactFlash.Name = "ImpactFlash"
@@ -268,7 +304,7 @@ function ProceduralLightning.CreateBolt(
 		end
 
 		-- Generate 2 helical ionized crackle arcs coiling around the sniper path
-		local helixSegments = 16
+		local helixSegments = 32
 		local helixSeed1 = math.random() * 100
 		local helixSeed2 = math.random() * 100
 		local prevH1 = startPos
@@ -380,11 +416,13 @@ function ProceduralLightning.CreateBolt(
 			end
 		end
 
-		if muzzleLight and muzzleLight.Parent then
-			local lightTw = TweenService:Create(muzzleLight, TweenInfo.new(fadeDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Brightness = 0,
-			})
-			lightTw:Play()
+		for _, light in ipairs(lightsToFade) do
+			if light and light.Parent then
+				local lightTw = TweenService:Create(light, TweenInfo.new(fadeDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Brightness = 0,
+				})
+				lightTw:Play()
+			end
 		end
 
 		task.delay(fadeDuration + 0.01, function()

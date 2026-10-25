@@ -161,6 +161,8 @@ end
 player.CharacterAdded:Connect(setupCharacter)
 
 local lastAimDir: Vector3? = nil
+local lastMoveFacingDir: Vector3? = nil
+local currentTorsoYaw = 0
 
 local function isPlayerFrozenInLevelUp(): boolean
 	if player:GetAttribute("IsLevelUpFrozen") == true then
@@ -279,16 +281,28 @@ local function onRenderStep(dt: number)
 			updateTargetReticle(closestPart)
 		else
 			updateTargetReticle(nil)
-			if moveDir.Magnitude > 0.05 then
-				aimDir = moveDir.Unit
-			end
 		end
 
-		if aimDir then
-			lastAimDir = aimDir
-			alignRot.CFrame = CFrame.lookAt(Vector3.zero, aimDir)
-		elseif lastAimDir then
-			alignRot.CFrame = CFrame.lookAt(Vector3.zero, lastAimDir)
+		-- 1. Lower Body / Legs Orientation: strictly aligned with movement direction
+		if moveDir.Magnitude > 0.05 then
+			lastMoveFacingDir = moveDir.Unit
+			alignRot.CFrame = CFrame.lookAt(Vector3.zero, moveDir.Unit)
+		elseif lastMoveFacingDir then
+			alignRot.CFrame = CFrame.lookAt(Vector3.zero, lastMoveFacingDir)
+		end
+
+		-- 2. Upper Body / Torso (Buste) Orientation: aims towards target or aligns with legs
+		local waistJoint = hrp:FindFirstChild("MechaWaistJoint") :: Motor6D?
+		if waistJoint then
+			if aimDir then
+				local localAim = hrp.CFrame:VectorToObjectSpace(aimDir)
+				local targetYaw = math.atan2(-localAim.X, -localAim.Z)
+				currentTorsoYaw = currentTorsoYaw + (targetYaw - currentTorsoYaw) * math.clamp(dt * 18, 0, 1)
+			else
+				-- No target: smoothly realign buste forward with legs
+				currentTorsoYaw = currentTorsoYaw * math.clamp(1 - dt * 12, 0, 1)
+			end
+			waistJoint.C0 = CFrame.new(0, 0.5, 0) * CFrame.Angles(0, currentTorsoYaw, 0)
 		end
 	end
 end

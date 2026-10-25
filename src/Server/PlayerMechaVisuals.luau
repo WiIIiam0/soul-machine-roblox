@@ -1,6 +1,6 @@
 --!strict
 -- PlayerMechaVisuals.luau: Automatically transforms player avatars into 3D Mechas from ReplicatedStorage.Mech
--- Preserves standard Roblox Humanoid physics while replacing visual limbs with the custom 3D Mecha
+-- Supports dual-axis rotation: legs face movement direction, while upper torso aims towards target or aligns with legs.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -70,6 +70,43 @@ local function findMechaTemplate(): Model?
 	return nil
 end
 
+local function isUpperBodyPart(part: BasePart, modelCenterY: number): boolean
+	local name = string.lower(part.Name)
+	if string.find(name, "spine") or string.find(name, "chest") or string.find(name, "torso")
+		or string.find(name, "head") or string.find(name, "neck") or string.find(name, "arm")
+		or string.find(name, "shoulder") or string.find(name, "hand") or string.find(name, "gun")
+		or string.find(name, "weapon") or string.find(name, "cockpit") or string.find(name, "backpack")
+		or string.find(name, "buste") then
+		return true
+	end
+	if string.find(name, "leg") or string.find(name, "foot") or string.find(name, "feet")
+		or string.find(name, "pelvis") or string.find(name, "hip") or string.find(name, "thigh")
+		or string.find(name, "wheel") or string.find(name, "track") or string.find(name, "tread") then
+		return false
+	end
+	return part.Position.Y >= modelCenterY
+end
+
+local function applySciFiMechaMaterials(part: BasePart)
+	local name = string.lower(part.Name)
+	if string.find(name, "eye") or string.find(name, "visor") or string.find(name, "glow")
+		or string.find(name, "light") or string.find(name, "core") or string.find(name, "glass") then
+		part.Material = Enum.Material.Neon
+		part.Color = Color3.fromRGB(0, 225, 255)
+	elseif string.find(name, "joint") or string.find(name, "spine") or string.find(name, "frame")
+		or string.find(name, "hydraulic") or string.find(name, "piston") then
+		part.Material = Enum.Material.DiamondPlate
+		part.Color = Color3.fromRGB(28, 32, 42)
+	elseif string.find(name, "accent") or string.find(name, "stripe") or string.find(name, "shoulder") then
+		part.Material = Enum.Material.Metal
+		part.Color = Color3.fromRGB(25, 125, 245)
+	else
+		-- High-grade gunmetal battle plating
+		part.Material = Enum.Material.Metal
+		part.Color = Color3.fromRGB(52, 58, 70)
+	end
+end
+
 function PlayerMechaVisuals.Apply(character: Model)
 	local hrp = character:WaitForChild("HumanoidRootPart", 5) :: BasePart?
 	local humanoid = character:WaitForChild("Humanoid", 5) :: Humanoid?
@@ -96,24 +133,6 @@ function PlayerMechaVisuals.Apply(character: Model)
 		end
 	end
 
-	-- Find primary anchor part of the mecha
-	local primary = clone.PrimaryPart
-	if not primary then
-		for _, desc in ipairs(clone:GetDescendants()) do
-			if desc:IsA("BasePart") then
-				primary = desc
-				clone.PrimaryPart = desc
-				break
-			end
-		end
-	end
-
-	if not primary then
-		warn("[PlayerMechaVisuals] Failed to find BasePart in template " .. template.Name)
-		clone:Destroy()
-		return
-	end
-
 	-- Prepare parts: unanchor, massless, non-colliding (zero physics interference)
 	for _, part in ipairs(clone:GetDescendants()) do
 		if part:IsA("BasePart") then
@@ -121,6 +140,7 @@ function PlayerMechaVisuals.Apply(character: Model)
 			part.Massless = true
 			part.Anchored = false
 			part.CastShadow = true
+			applySciFiMechaMaterials(part)
 		end
 	end
 
@@ -149,27 +169,67 @@ function PlayerMechaVisuals.Apply(character: Model)
 	-- Position mecha at HumanoidRootPart slightly offset so feet align with ground
 	clone:PivotTo(hrp.CFrame * CFrame.new(0, -0.6, 0))
 
-	-- Weld main part to HumanoidRootPart
-	local rootWeld = Instance.new("WeldConstraint")
-	rootWeld.Name = "MechaRootWeld"
-	rootWeld.Part0 = hrp
-	rootWeld.Part1 = primary
-	rootWeld.Parent = primary
+	-- Calculate model vertical center to separate Lower Body (legs) and Upper Body (torso)
+	local modelCf, modelSize = clone:GetBoundingBox()
+	local modelCenterY = modelCf.Position.Y - (modelSize.Y * 0.1)
 
-	-- Weld all secondary parts to primary
+	-- Create Torso Anchor for swiveling Upper Body
+	local torsoAnchor = Instance.new("Part")
+	torsoAnchor.Name = "MechaTorsoAnchor"
+	torsoAnchor.Size = Vector3.new(1, 1, 1)
+	torsoAnchor.CFrame = hrp.CFrame * CFrame.new(0, 0.5, 0)
+	torsoAnchor.Transparency = 1
+	torsoAnchor.CanCollide = false
+	torsoAnchor.Massless = true
+	torsoAnchor.Anchored = false
+	torsoAnchor.Parent = clone
+
+	-- Motor6D connecting Legs (HRP) to Torso Anchor (Allows independent buste rotation)
+	local oldJoint = hrp:FindFirstChild("MechaWaistJoint")
+	if oldJoint then oldJoint:Destroy() end
+
+	local waistJoint = Instance.new("Motor6D")
+	waistJoint.Name = "MechaWaistJoint"
+	waistJoint.Part0 = hrp
+	waistJoint.Part1 = torsoAnchor
+	waistJoint.C0 = CFrame.new(0, 0.5, 0)
+	waistJoint.C1 = CFrame.identity
+	waistJoint.Parent = hrp
+
+	-- Separate and weld Upper vs Lower parts
+	local upperParts: { BasePart } = {}
+	local lowerParts: { BasePart } = {}
+
 	for _, p in ipairs(clone:GetDescendants()) do
-		if p:IsA("BasePart") and p ~= primary then
-			local subWeld = Instance.new("WeldConstraint")
-			subWeld.Part0 = primary
-			subWeld.Part1 = p
-			subWeld.Parent = p
+		if p:IsA("BasePart") and p ~= torsoAnchor then
+			if isUpperBodyPart(p, modelCenterY) then
+				table.insert(upperParts, p)
+			else
+				table.insert(lowerParts, p)
+			end
 		end
+	end
+
+	-- Weld upper body parts to torsoAnchor
+	for _, p in ipairs(upperParts) do
+		local w = Instance.new("WeldConstraint")
+		w.Part0 = torsoAnchor
+		w.Part1 = p
+		w.Parent = p
+	end
+
+	-- Weld lower body (legs/hips) to HRP
+	for _, p in ipairs(lowerParts) do
+		local w = Instance.new("WeldConstraint")
+		w.Part0 = hrp
+		w.Part1 = p
+		w.Parent = p
 	end
 
 	clone.Name = "MechaAvatar"
 	clone.Parent = character
 
-	print(string.format("[PlayerMechaVisuals] Successfully transformed '%s' into Mecha '%s'!", character.Name, template.Name))
+	print(string.format("[PlayerMechaVisuals] Applied modular Mecha '%s' (Upper: %d, Lower: %d)", template.Name, #upperParts, #lowerParts))
 end
 
 return PlayerMechaVisuals

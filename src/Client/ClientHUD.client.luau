@@ -39,14 +39,14 @@ vfxGui.IgnoreGuiInset = true
 vfxGui.DisplayOrder = 25
 vfxGui.Parent = playerGui
 
--- 3. Discreet Top-Center Sector / Level / Wave Indicator (no redundant XP gauge)
+-- 3. Modern Cyber Pill Zone Indicator (Collision-free centered header)
 local topInfoContainer = Instance.new("Frame")
 topInfoContainer.Name = "TopInfoContainer"
-topInfoContainer.Size = UDim2.new(0, 330, 0, 30)
+topInfoContainer.Size = UDim2.new(0, 180, 0, 32)
 topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
 topInfoContainer.Position = UDim2.new(0.5, 0, 0, 48)
-topInfoContainer.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
-topInfoContainer.BackgroundTransparency = 0.35
+topInfoContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
+topInfoContainer.BackgroundTransparency = 0.20
 topInfoContainer.BorderSizePixel = 0
 topInfoContainer.ZIndex = 10
 topInfoContainer.Parent = screenGui
@@ -56,25 +56,35 @@ topInfoScale.Name = "TopInfoScale"
 topInfoScale.Parent = topInfoContainer
 
 local topInfoCorner = Instance.new("UICorner")
-topInfoCorner.CornerRadius = UDim.new(0, 8)
+topInfoCorner.CornerRadius = UDim.new(0, 16)
 topInfoCorner.Parent = topInfoContainer
 
 local topInfoStroke = Instance.new("UIStroke")
-topInfoStroke.Color = Color3.fromRGB(0, 180, 240)
+topInfoStroke.Color = Color3.fromRGB(0, 200, 255)
 topInfoStroke.Thickness = 1.2
-topInfoStroke.Transparency = 0.45
+topInfoStroke.Transparency = 0.40
 topInfoStroke.Parent = topInfoContainer
+
+local topInfoGradient = Instance.new("UIGradient")
+topInfoGradient.Rotation = 90
+topInfoGradient.Color = ColorSequence.new({
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 36, 52)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 14, 22)),
+})
+topInfoGradient.Parent = topInfoContainer
 
 local topInfoLabel = Instance.new("TextLabel")
 topInfoLabel.Name = "TopInfoLabel"
 topInfoLabel.Size = UDim2.new(1, -16, 1, 0)
 topInfoLabel.Position = UDim2.new(0, 8, 0, 0)
 topInfoLabel.BackgroundTransparency = 1
-topInfoLabel.TextColor3 = Color3.fromRGB(230, 245, 255)
+topInfoLabel.TextColor3 = Color3.fromRGB(240, 250, 255)
 topInfoLabel.Font = Enum.Font.GothamBlack
-topInfoLabel.TextSize = 12
+topInfoLabel.TextSize = 13
 topInfoLabel.TextWrapped = false
-topInfoLabel.Text = "ZONE 1  •  NIV. 1  •  VAGUE 1 (35s)"
+topInfoLabel.TextXAlignment = Enum.TextXAlignment.Center
+topInfoLabel.TextYAlignment = Enum.TextYAlignment.Center
+topInfoLabel.Text = "ZONE 1"
 topInfoLabel.Parent = topInfoContainer
 
 -- 4. Global (Persistent / ADN) XP Bar Flush at the Very Bottom Edge (No Canvas / Card Frame)
@@ -167,6 +177,7 @@ Remotes.GetEvent("LevelUpOptions").OnClientEvent:Connect(function(cards: { any }
 end)
 
 -- 6. Monotonic Responsive Viewport Binder
+-- 6. Monotonic Responsive Viewport Binder with Dynamic Topbar Collision Avoidance
 local function applyResponsiveLayout()
 	local cam = Workspace.CurrentCamera
 	if not cam then return end
@@ -176,8 +187,30 @@ local function applyResponsiveLayout()
 	local topInset = GuiService:GetGuiInset().Y
 	local baseScale = math.clamp(math.min(vp.X / 1366, vp.Y / 768), 0.74, 1.12)
 
-	topInfoContainer.Position = UDim2.new(0.5, 0, 0, topInset + 8)
-	topInfoScale.Scale = math.clamp(math.min(baseScale, (vp.X - 24) / 330), 0.55, 1.10)
+	-- Dynamic collision-free positioning avoiding Roblox top-left core buttons
+	local topbarRect = GuiService.TopbarInset
+	local coreButtonsRight = math.max(topbarRect.Max.X, 150)
+	local screenWidth = vp.X
+	local badgeBaseWidth = 180
+	local badgeScale = math.clamp(baseScale, 0.75, 1.05)
+	local effectiveWidth = badgeBaseWidth * badgeScale
+	local idealCenterX = screenWidth * 0.5
+	local badgeLeftEdge = idealCenterX - (effectiveWidth * 0.5)
+	local safeLimit = coreButtonsRight + 12
+
+	if badgeLeftEdge >= safeLimit then
+		-- No collision: perfectly centered horizontally across screen
+		topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
+		topInfoContainer.Position = UDim2.new(0.5, 0, 0, topInset + 8)
+	else
+		-- Collision detected: center dynamically between the Roblox buttons and right edge of screen
+		local availableSpace = screenWidth - coreButtonsRight
+		local shiftedCenterX = coreButtonsRight + (availableSpace * 0.5)
+		topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
+		topInfoContainer.Position = UDim2.new(0, math.floor(shiftedCenterX), 0, topInset + 8)
+	end
+
+	topInfoScale.Scale = badgeScale
 
 	inventoryController.ApplyViewport(vp, baseScale)
 	overlays.ApplyViewport(vp, baseScale)
@@ -187,6 +220,7 @@ end
 local function bindCameraViewport(cam: Camera?)
 	if not cam then return end
 	cam:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
+	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(applyResponsiveLayout)
 	applyResponsiveLayout()
 end
 
@@ -214,11 +248,17 @@ local prevHP: number? = nil
 
 local function refreshTopInfoText()
 	if currentWaveState == "BOSS" then
+		topInfoStroke.Color = Color3.fromRGB(255, 75, 85)
 		topInfoLabel.TextColor3 = Color3.fromRGB(255, 85, 95)
-		topInfoLabel.Text = string.format("ZONE %d  •  NIV. %d  •  BOSS VAGUE %d (%ds)", currentZoneId, currentRunLevel, currentSurvivingWave, currentWaveTimer)
+		topInfoLabel.Text = string.format("ZONE %d  •  ⚠ ALERTE BOSS", currentZoneId)
 	else
-		topInfoLabel.TextColor3 = Color3.fromRGB(230, 245, 255)
-		topInfoLabel.Text = string.format("ZONE %d  •  NIV. %d  •  VAGUE %d (%ds)", currentZoneId, currentRunLevel, currentSurvivingWave, currentWaveTimer)
+		topInfoStroke.Color = Color3.fromRGB(0, 200, 255)
+		topInfoLabel.TextColor3 = Color3.fromRGB(240, 250, 255)
+		if currentZoneName and currentZoneName ~= "" and currentZoneName ~= ("ZONE " .. currentZoneId) then
+			topInfoLabel.Text = string.format("ZONE %d : %s", currentZoneId, string.upper(currentZoneName))
+		else
+			topInfoLabel.Text = string.format("ZONE %d", currentZoneId)
+		end
 	end
 end
 
@@ -358,10 +398,12 @@ Remotes.GetEvent("StateSync").OnClientEvent:Connect(function(data: any)
 		OverheadVitals.UpdateOverdrive(data.currentOverdrive, data.maxOverdrive, data.isOverdriveActive == true)
 	end
 
-	if data.level and data.currentXP ~= nil and data.xpToNextLevel then
+	if data.level then
 		currentRunLevel = data.level
-		OverheadVitals.UpdateXP(data.currentXP, data.xpToNextLevel)
-		refreshTopInfoText()
+		OverheadVitals.UpdateLevel(currentRunLevel)
+		if data.currentXP ~= nil and data.xpToNextLevel then
+			OverheadVitals.UpdateXP(data.currentXP, data.xpToNextLevel)
+		end
 		refreshLocalPortalVisuals()
 	end
 
