@@ -255,9 +255,13 @@ RunService.Heartbeat:Connect(function(dt: number)
 		local stepDist = bullet.speed * dt
 		local nextPos = bullet.position + (bullet.direction * stepDist)
 
-		-- Check hit against players
+		-- Check hit against players (ignore dead or phased-out / spawn-protected players)
 		local didHitPlayer = false
 		for _, player in ipairs(Players:GetPlayers()) do
+			local pData = PlayerStatsManager.GetPlayerData(player)
+			if not pData or pData.isDead or PlayerStatsManager.IsPhasedOut(player) then
+				continue
+			end
 			local char = player.Character
 			if char and char:FindFirstChild("HumanoidRootPart") then
 				local pPos = (char:FindFirstChild("HumanoidRootPart") :: BasePart).Position

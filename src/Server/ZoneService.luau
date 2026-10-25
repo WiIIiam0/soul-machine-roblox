@@ -103,6 +103,7 @@ local function switchLocalStudioZone(targetZoneId: number)
 
 		local hasPendingRewards = RewardService.ExportUnclaimedCount(p) > 0
 		PlayerStatsManager.SetLevelUpPhase(p, hasPendingRewards)
+		PlayerStatsManager.GrantSpawnProtection(p, 3.0)
 
 		local char = p.Character
 		if char then

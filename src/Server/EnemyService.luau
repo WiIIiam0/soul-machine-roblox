@@ -788,7 +788,7 @@ local function getNearestPlayer(pos: Vector3): (Player?, Vector3?, number)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local pData = PlayerStatsManager.GetPlayerData(player)
-		if pData and not pData.isDead and not pData.isLevelUpPhase then
+		if pData and not pData.isDead and not PlayerStatsManager.IsPhasedOut(player) then
 			local char = player.Character
 			if char and char:FindFirstChild("HumanoidRootPart") then
 				local pPos = (char:FindFirstChild("HumanoidRootPart") :: BasePart).Position

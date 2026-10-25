@@ -71,6 +71,15 @@ local function setupPlayer(player: Player)
 
 			-- Spawn léger décalage aléatoire autour du centre pour la coop multi-joueurs
 			hrp.CFrame = CFrame.new(math.random(-6, 6), 4, math.random(-6, 6))
+
+			-- 3 secondes d'immunité + non-aggro à l'arrivée dans la zone (déplacement libre)
+			PlayerStatsManager.GrantSpawnProtection(player, 3.0)
+			task.delay(0.15, function()
+				if player.Parent then
+					PlayerStatsManager.RefreshPhaseVisuals(player)
+				end
+			end)
+
 			ZoneService.SyncZoneToClient(player)
 		end
 	end

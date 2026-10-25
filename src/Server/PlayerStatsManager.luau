@@ -24,6 +24,8 @@ export type PlayerData = {
 	currentStats: StatTypes.PlayerStats,
 	isDead: boolean,
 	isLevelUpPhase: boolean,
+	spawnProtectionUntil: number,
+	spawnProtectionToken: number,
 }
 
 local PlayerStatsManager = {}
@@ -57,6 +59,8 @@ function PlayerStatsManager.InitPlayer(player: Player): PlayerData
 		currentStats = StatTypes.CloneStats(base),
 		isDead = false,
 		isLevelUpPhase = false,
+		spawnProtectionUntil = 0,
+		spawnProtectionToken = 0,
 	}
 
 	playerDataMap[player] = data
@@ -125,21 +129,35 @@ function PlayerStatsManager.GetStatCardLevels(player: Player): { [string]: numbe
 	return data.statCardLevels
 end
 
-function PlayerStatsManager.SetLevelUpPhase(player: Player, active: boolean)
+function PlayerStatsManager.IsPhasedOut(player: Player): boolean
+	local data = playerDataMap[player]
+	if not data then return false end
+	return data.isLevelUpPhase or (os.clock() < data.spawnProtectionUntil)
+end
+
+function PlayerStatsManager.RefreshPhaseVisuals(player: Player)
 	local data = playerDataMap[player]
 	if not data then return end
-	data.isLevelUpPhase = active
 
+	local phased = PlayerStatsManager.IsPhasedOut(player)
 	local char = player.Character
 	if char then
 		for _, part in ipairs(char:GetDescendants()) do
 			if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-				part.Transparency = if active then 0.55 else 0
+				local origAttr = part:GetAttribute("OrigTransparency")
+				if origAttr == nil then
+					part:SetAttribute("OrigTransparency", part.Transparency)
+					origAttr = part.Transparency
+				end
+				local orig = tonumber(origAttr) or 0
+				if orig < 0.95 then
+					part.Transparency = if phased then math.max(orig, 0.55) else orig
+				end
 			end
 		end
 
 		local highlight = char:FindFirstChild("LevelUpPhaseAura") :: Highlight?
-		if active then
+		if phased then
 			if not highlight then
 				highlight = Instance.new("Highlight")
 				highlight.Name = "LevelUpPhaseAura"
@@ -157,9 +175,36 @@ function PlayerStatsManager.SetLevelUpPhase(player: Player, active: boolean)
 	end
 end
 
+function PlayerStatsManager.SetLevelUpPhase(player: Player, active: boolean)
+	local data = playerDataMap[player]
+	if not data then return end
+	data.isLevelUpPhase = active
+	PlayerStatsManager.RefreshPhaseVisuals(player)
+end
+
+-- Immunité + non-aggro temporaire à l'arrivée dans une zone (déplacement et tir libres)
+function PlayerStatsManager.GrantSpawnProtection(player: Player, duration: number?)
+	local data = playerDataMap[player]
+	if not data then return end
+
+	local dur = duration or 3.0
+	data.spawnProtectionUntil = math.max(data.spawnProtectionUntil, os.clock() + dur)
+	data.spawnProtectionToken += 1
+	local token = data.spawnProtectionToken
+
+	PlayerStatsManager.RefreshPhaseVisuals(player)
+
+	task.delay(dur + 0.05, function()
+		local current = playerDataMap[player]
+		if current and current.spawnProtectionToken == token then
+			PlayerStatsManager.RefreshPhaseVisuals(player)
+		end
+	end)
+end
+
 function PlayerStatsManager.TakeDamage(player: Player, rawDamage: number, attacker: any?): number
 	local data = playerDataMap[player]
-	if not data or data.isDead or data.isLevelUpPhase then return 0 end
+	if not data or data.isDead or PlayerStatsManager.IsPhasedOut(player) then return 0 end
 
 	local actualDamage = StatTypes.CalculateDamageAfterArmor(rawDamage, data.currentStats.Armor)
 	data.currentHP = math.max(0, data.currentHP - actualDamage)
