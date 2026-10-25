@@ -101,6 +101,18 @@ Remotes.GetEvent("RestartRun").OnServerEvent:Connect(function(player: Player)
 	ZoneService.RestartPlayerToZone1(player)
 end)
 
+-- Full HUD resync on client mount (eliminates PlayerAdded vs LocalScript load race)
+Remotes.GetEvent("RequestSync").OnServerEvent:Connect(function(player: Player)
+	MetaProgressionService.SyncMeta(player)
+	PlayerStatsManager.SyncToClient(player)
+	XPService.SyncXP(player)
+	ZoneService.SyncZoneToClient(player)
+	Remotes.GetEvent("StateSync"):FireClient(player, {
+		weapons = WeaponService.GetPlayerWeapons(player),
+		passives = PassiveService.GetPlayerPassives(player),
+	})
+end)
+
 -- 4. Start Endless Zone Enemy Director
 EnemyDirector.Start()
 

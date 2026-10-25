@@ -339,7 +339,15 @@ RunService.Heartbeat:Connect(function(dt: number)
 		local stats = pData.currentStats
 		local fireRateMultiplier = math.max(0.2, stats.FireRateMultiplier)
 
-		-- Overdrive Frenzy Weapon
+		-- Overdrive Frenzy Weapon (auto-triggers when full & enemy in range, matching Unity WeaponManager.cs)
+		if not pData.isOverdriveActive and pData.currentOverdrive >= pData.maxOverdrive then
+			local odDef = WeaponsData.GetWeapon("OverdriveWeapon")
+			local odRange = if odDef and #odDef.ranks > 0 then odDef.ranks[1].range * stats.RangeMultiplier else 40
+			if EnemyService.GetClosestEnemy(pPos, odRange) ~= nil then
+				PlayerStatsManager.TryActivateOverdrive(player)
+			end
+		end
+
 		if pData.isOverdriveActive then
 			state.overdriveCooldown -= dt
 			if state.overdriveCooldown <= 0 then

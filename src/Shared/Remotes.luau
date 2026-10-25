@@ -16,6 +16,7 @@ local REMOTE_EVENT_NAMES = {
 	"MetaSync",              -- Server -> Client: GlobalLevel, GlobalXP, XPToNextLevel, WeaponSlots, PassiveSlots, UnlockedWeapons, UnlockedPassives
 	"GlobalLevelUp",         -- Server -> Client: new global level, unlock notification
 	"RestartRun",            -- Client -> Server: restart after game over
+	"RequestSync",           -- Client -> Server: request full HUD state sync once HUD is mounted
 }
 
 local Remotes = {}
