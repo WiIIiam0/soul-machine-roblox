@@ -163,6 +163,10 @@ player.CharacterAdded:Connect(setupCharacter)
 local lastAimDir: Vector3? = nil
 local lastMoveFacingDir: Vector3? = nil
 local currentTorsoYaw = 0
+local walkCycle = 0
+local BASE_LEFT_HIP_C0 = CFrame.new(-0.8, -0.2, 0)
+local BASE_RIGHT_HIP_C0 = CFrame.new(0.8, -0.2, 0)
+local BASE_TORSO_C0 = CFrame.new(0, 0.5, 0)
 
 local function isPlayerFrozenInLevelUp(): boolean
 	if player:GetAttribute("IsLevelUpFrozen") == true then
@@ -291,8 +295,12 @@ local function onRenderStep(dt: number)
 			alignRot.CFrame = CFrame.lookAt(Vector3.zero, lastMoveFacingDir)
 		end
 
-		-- 2. Upper Body / Torso (Buste) Orientation: aims towards target or aligns with legs
+		-- 2. Articulated Mecha Locomotion & Dual-Axis Upper Body Orientation
 		local waistJoint = hrp:FindFirstChild("MechaWaistJoint") :: Motor6D?
+		local leftHip = hrp:FindFirstChild("MechaLeftHip") :: Motor6D?
+		local rightHip = hrp:FindFirstChild("MechaRightHip") :: Motor6D?
+
+		-- Upper Body / Torso (Buste) Target Angle
 		if waistJoint then
 			if aimDir then
 				local localAim = hrp.CFrame:VectorToObjectSpace(aimDir)
@@ -302,7 +310,38 @@ local function onRenderStep(dt: number)
 				-- No target: smoothly realign buste forward with legs
 				currentTorsoYaw = currentTorsoYaw * math.clamp(1 - dt * 12, 0, 1)
 			end
-			waistJoint.C0 = CFrame.new(0, 0.5, 0) * CFrame.Angles(0, currentTorsoYaw, 0)
+		end
+
+		-- Procedural Mechanical Leg Strides & Stride Bobbing
+		local isMoving = moveDir.Magnitude > 0.05
+		if isMoving then
+			local spd = humanoid.WalkSpeed
+			walkCycle += dt * (spd * 0.95)
+			local strideAngle = math.sin(walkCycle) * math.rad(28)
+			local bobOffset = math.abs(math.sin(walkCycle)) * 0.22
+			local rollAngle = math.sin(walkCycle) * math.rad(2.2)
+
+			if leftHip then
+				leftHip.C0 = BASE_LEFT_HIP_C0 * CFrame.Angles(strideAngle, 0, 0)
+			end
+			if rightHip then
+				rightHip.C0 = BASE_RIGHT_HIP_C0 * CFrame.Angles(-strideAngle, 0, 0)
+			end
+			if waistJoint then
+				waistJoint.C0 = CFrame.new(0, 0.5 + bobOffset, 0) * CFrame.Angles(0, currentTorsoYaw, rollAngle)
+			end
+		else
+			-- Return smoothly to neutral stance
+			walkCycle = 0
+			if leftHip then
+				leftHip.C0 = leftHip.C0:Lerp(BASE_LEFT_HIP_C0, math.clamp(dt * 14, 0, 1))
+			end
+			if rightHip then
+				rightHip.C0 = rightHip.C0:Lerp(BASE_RIGHT_HIP_C0, math.clamp(dt * 14, 0, 1))
+			end
+			if waistJoint then
+				waistJoint.C0 = waistJoint.C0:Lerp(BASE_TORSO_C0 * CFrame.Angles(0, currentTorsoYaw, 0), math.clamp(dt * 14, 0, 1))
+			end
 		end
 	end
 end

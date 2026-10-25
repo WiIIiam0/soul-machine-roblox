@@ -86,30 +86,8 @@ function HudOverlays.Create(screenGui: ScreenGui, vfxGui: ScreenGui, onRestartRu
 
 	local bannerGeneration = 0
 	local function presentBanner(titleText: string, descText: string, duration: number)
-		bannerGeneration += 1
-		local gen = bannerGeneration
-		local topInset = GuiService:GetGuiInset().Y
-
-		gbTitle.Text = titleText
-		gbDesc.Text = descText
-		globalLevelUpBanner.Visible = true
-
-		TweenService:Create(globalLevelUpBanner, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-			Position = UDim2.new(0.5, 0, 0, topInset + 46),
-		}):Play()
-
-		task.delay(duration, function()
-			if gen ~= bannerGeneration then return end
-			local slideOut = TweenService:Create(globalLevelUpBanner, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-				Position = UDim2.new(0.5, 0, 0, -120),
-			})
-			slideOut:Play()
-			slideOut.Completed:Connect(function()
-				if gen == bannerGeneration then
-					globalLevelUpBanner.Visible = false
-				end
-			end)
-		end)
+		-- Disabled intrusive fullscreen banner overlay (user requested no obstructive canvas frames)
+		globalLevelUpBanner.Visible = false
 	end
 
 	-- 3. Game Over Summary Modal

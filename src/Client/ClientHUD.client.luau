@@ -42,11 +42,11 @@ vfxGui.Parent = playerGui
 -- 3. Modern Cyber Pill Zone Indicator (Collision-free centered header)
 local topInfoContainer = Instance.new("Frame")
 topInfoContainer.Name = "TopInfoContainer"
-topInfoContainer.Size = UDim2.new(0, 180, 0, 32)
+topInfoContainer.Size = UDim2.new(0, 130, 0, 26)
 topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
 topInfoContainer.Position = UDim2.new(0.5, 0, 0, 48)
-topInfoContainer.BackgroundColor3 = Color3.fromRGB(12, 16, 26)
-topInfoContainer.BackgroundTransparency = 0.20
+topInfoContainer.BackgroundColor3 = Color3.fromRGB(10, 14, 22)
+topInfoContainer.BackgroundTransparency = 0.45
 topInfoContainer.BorderSizePixel = 0
 topInfoContainer.ZIndex = 10
 topInfoContainer.Parent = screenGui
@@ -56,27 +56,19 @@ topInfoScale.Name = "TopInfoScale"
 topInfoScale.Parent = topInfoContainer
 
 local topInfoCorner = Instance.new("UICorner")
-topInfoCorner.CornerRadius = UDim.new(0, 16)
+topInfoCorner.CornerRadius = UDim.new(0, 13)
 topInfoCorner.Parent = topInfoContainer
 
 local topInfoStroke = Instance.new("UIStroke")
-topInfoStroke.Color = Color3.fromRGB(0, 200, 255)
-topInfoStroke.Thickness = 1.2
-topInfoStroke.Transparency = 0.40
+topInfoStroke.Color = Color3.fromRGB(0, 180, 240)
+topInfoStroke.Thickness = 1.0
+topInfoStroke.Transparency = 0.50
 topInfoStroke.Parent = topInfoContainer
-
-local topInfoGradient = Instance.new("UIGradient")
-topInfoGradient.Rotation = 90
-topInfoGradient.Color = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 36, 52)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 14, 22)),
-})
-topInfoGradient.Parent = topInfoContainer
 
 local topInfoLabel = Instance.new("TextLabel")
 topInfoLabel.Name = "TopInfoLabel"
-topInfoLabel.Size = UDim2.new(1, -16, 1, 0)
-topInfoLabel.Position = UDim2.new(0, 8, 0, 0)
+topInfoLabel.Size = UDim2.new(1, 0, 1, 0)
+topInfoLabel.Position = UDim2.new(0, 0, 0, 0)
 topInfoLabel.BackgroundTransparency = 1
 topInfoLabel.TextColor3 = Color3.fromRGB(240, 250, 255)
 topInfoLabel.Font = Enum.Font.GothamBlack
@@ -187,25 +179,24 @@ local function applyResponsiveLayout()
 	local topInset = GuiService:GetGuiInset().Y
 	local baseScale = math.clamp(math.min(vp.X / 1366, vp.Y / 768), 0.74, 1.12)
 
-	-- Dynamic collision-free positioning avoiding Roblox top-left core buttons
-	local topbarRect = GuiService.TopbarInset
-	local coreButtonsRight = math.max(topbarRect.Max.X, 150)
+	-- Dynamic collision-free positioning avoiding Roblox top-left core buttons (Fixed ~140px width)
+	local CORE_BUTTONS_RIGHT = 140
 	local screenWidth = vp.X
-	local badgeBaseWidth = 180
+	local badgeBaseWidth = 130
 	local badgeScale = math.clamp(baseScale, 0.75, 1.05)
 	local effectiveWidth = badgeBaseWidth * badgeScale
 	local idealCenterX = screenWidth * 0.5
 	local badgeLeftEdge = idealCenterX - (effectiveWidth * 0.5)
-	local safeLimit = coreButtonsRight + 12
+	local safeLimit = CORE_BUTTONS_RIGHT + 12
 
 	if badgeLeftEdge >= safeLimit then
 		-- No collision: perfectly centered horizontally across screen
 		topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
 		topInfoContainer.Position = UDim2.new(0.5, 0, 0, topInset + 8)
 	else
-		-- Collision detected: center dynamically between the Roblox buttons and right edge of screen
-		local availableSpace = screenWidth - coreButtonsRight
-		local shiftedCenterX = coreButtonsRight + (availableSpace * 0.5)
+		-- Collision detected on narrow screens: center dynamically between the core buttons and right edge of screen
+		local availableSpace = screenWidth - CORE_BUTTONS_RIGHT
+		local shiftedCenterX = CORE_BUTTONS_RIGHT + (availableSpace * 0.5)
 		topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
 		topInfoContainer.Position = UDim2.new(0, math.floor(shiftedCenterX), 0, topInset + 8)
 	end
@@ -220,7 +211,6 @@ end
 local function bindCameraViewport(cam: Camera?)
 	if not cam then return end
 	cam:GetPropertyChangedSignal("ViewportSize"):Connect(applyResponsiveLayout)
-	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(applyResponsiveLayout)
 	applyResponsiveLayout()
 end
 
@@ -250,15 +240,11 @@ local function refreshTopInfoText()
 	if currentWaveState == "BOSS" then
 		topInfoStroke.Color = Color3.fromRGB(255, 75, 85)
 		topInfoLabel.TextColor3 = Color3.fromRGB(255, 85, 95)
-		topInfoLabel.Text = string.format("ZONE %d  •  ⚠ ALERTE BOSS", currentZoneId)
+		topInfoLabel.Text = string.format("ZONE %d  •  ⚠ BOSS", currentZoneId)
 	else
-		topInfoStroke.Color = Color3.fromRGB(0, 200, 255)
+		topInfoStroke.Color = Color3.fromRGB(0, 180, 240)
 		topInfoLabel.TextColor3 = Color3.fromRGB(240, 250, 255)
-		if currentZoneName and currentZoneName ~= "" and currentZoneName ~= ("ZONE " .. currentZoneId) then
-			topInfoLabel.Text = string.format("ZONE %d : %s", currentZoneId, string.upper(currentZoneName))
-		else
-			topInfoLabel.Text = string.format("ZONE %d", currentZoneId)
-		end
+		topInfoLabel.Text = string.format("ZONE %d", currentZoneId)
 	end
 end
 

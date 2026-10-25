@@ -1,6 +1,6 @@
 --!strict
--- PlayerMechaVisuals.luau: Automatically transforms player avatars into 3D Mechas from ReplicatedStorage.Mech
--- Supports dual-axis rotation: legs face movement direction, while upper torso aims towards target or aligns with legs.
+-- PlayerMechaVisuals.luau: Modular 3D Mecha transformation with independent Torso (aim) and Legs (walk cycle) joints
+-- Fully supports dual-axis rotation and procedural mechanical walk animation.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -39,7 +39,6 @@ local function findMechaTemplate(): Model?
 
 	for _, container in ipairs(containers) do
 		if container then
-			-- 1. Try prioritized exact/keyword candidates
 			for _, kw in ipairs(MECHA_CANDIDATE_KEYWORDS) do
 				for _, desc in ipairs(container:GetDescendants()) do
 					if desc:IsA("Model") and not desc:FindFirstAncestor("ActiveEnemies") and not desc:FindFirstAncestorOfClass("Player") then
@@ -53,7 +52,6 @@ local function findMechaTemplate(): Model?
 				end
 			end
 
-			-- 2. Fallback: Any model starting with Mech_Humanoid or Cockpit
 			for _, desc in ipairs(container:GetDescendants()) do
 				if desc:IsA("Model") and not desc:FindFirstAncestor("ActiveEnemies") and not desc:FindFirstAncestorOfClass("Player") then
 					local lower = string.lower(desc.Name)
@@ -107,12 +105,26 @@ local function applySciFiMechaMaterials(part: BasePart)
 	end
 end
 
+local function createJointAnchor(name: string, cframe: CFrame, parent: Instance): BasePart
+	local p = Instance.new("Part")
+	p.Name = name
+	p.Size = Vector3.new(0.5, 0.5, 0.5)
+	p.CFrame = cframe
+	p.Transparency = 1
+	p.CanCollide = false
+	p.CanTouch = false
+	p.CanQuery = false
+	p.Massless = true
+	p.Anchored = false
+	p.Parent = parent
+	return p
+end
+
 function PlayerMechaVisuals.Apply(character: Model)
 	local hrp = character:WaitForChild("HumanoidRootPart", 5) :: BasePart?
 	local humanoid = character:WaitForChild("Humanoid", 5) :: Humanoid?
 	if not hrp or not humanoid then return end
 
-	-- Remove existing Mecha avatar if re-applying
 	local existing = character:FindFirstChild("MechaAvatar")
 	if existing then
 		existing:Destroy()
@@ -126,14 +138,14 @@ function PlayerMechaVisuals.Apply(character: Model)
 
 	local clone = template:Clone()
 
-	-- Clean up nested humanoids to prevent Roblox character physics conflicts
+	-- Clean up nested humanoids or animators to prevent Roblox physics conflicts
 	for _, child in ipairs(clone:GetDescendants()) do
 		if child:IsA("Humanoid") or child:IsA("Animator") then
 			child:Destroy()
 		end
 	end
 
-	-- Prepare parts: unanchor, massless, non-colliding (zero physics interference)
+	-- Prepare parts: unanchor, massless, non-colliding
 	for _, part in ipairs(clone:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.CanCollide = false
@@ -144,7 +156,7 @@ function PlayerMechaVisuals.Apply(character: Model)
 		end
 	end
 
-	-- Scale mecha to heroic robot height (~6.2 studs)
+	-- Scale mecha to heroic height (~6.2 studs)
 	local extents = clone:GetExtentsSize()
 	if extents.Y > 0 then
 		local targetHeight = 6.2
@@ -166,70 +178,82 @@ function PlayerMechaVisuals.Apply(character: Model)
 		end
 	end
 
-	-- Position mecha at HumanoidRootPart slightly offset so feet align with ground
+	-- Position mecha slightly offset so feet align flush with ground
 	clone:PivotTo(hrp.CFrame * CFrame.new(0, -0.6, 0))
 
-	-- Calculate model vertical center to separate Lower Body (legs) and Upper Body (torso)
 	local modelCf, modelSize = clone:GetBoundingBox()
 	local modelCenterY = modelCf.Position.Y - (modelSize.Y * 0.1)
 
-	-- Create Torso Anchor for swiveling Upper Body
-	local torsoAnchor = Instance.new("Part")
-	torsoAnchor.Name = "MechaTorsoAnchor"
-	torsoAnchor.Size = Vector3.new(1, 1, 1)
-	torsoAnchor.CFrame = hrp.CFrame * CFrame.new(0, 0.5, 0)
-	torsoAnchor.Transparency = 1
-	torsoAnchor.CanCollide = false
-	torsoAnchor.Massless = true
-	torsoAnchor.Anchored = false
-	torsoAnchor.Parent = clone
+	-- 1. Create independent Torso & Leg Anchors
+	local torsoAnchor = createJointAnchor("MechaTorsoAnchor", hrp.CFrame * CFrame.new(0, 0.5, 0), clone)
+	local leftLegAnchor = createJointAnchor("MechaLeftLegAnchor", hrp.CFrame * CFrame.new(-0.8, -0.2, 0), clone)
+	local rightLegAnchor = createJointAnchor("MechaRightLegAnchor", hrp.CFrame * CFrame.new(0.8, -0.2, 0), clone)
 
-	-- Motor6D connecting Legs (HRP) to Torso Anchor (Allows independent buste rotation)
-	local oldJoint = hrp:FindFirstChild("MechaWaistJoint")
-	if oldJoint then oldJoint:Destroy() end
+	-- 2. Create Motor6D joints on HRP for full animation
+	local function createOrResetMotor6D(name: string, p0: BasePart, p1: BasePart, c0: CFrame): Motor6D
+		local existingJoint = hrp:FindFirstChild(name)
+		if existingJoint then existingJoint:Destroy() end
 
-	local waistJoint = Instance.new("Motor6D")
-	waistJoint.Name = "MechaWaistJoint"
-	waistJoint.Part0 = hrp
-	waistJoint.Part1 = torsoAnchor
-	waistJoint.C0 = CFrame.new(0, 0.5, 0)
-	waistJoint.C1 = CFrame.identity
-	waistJoint.Parent = hrp
+		local m = Instance.new("Motor6D")
+		m.Name = name
+		m.Part0 = p0
+		m.Part1 = p1
+		m.C0 = c0
+		m.C1 = CFrame.identity
+		m.Parent = hrp
+		return m
+	end
 
-	-- Separate and weld Upper vs Lower parts
-	local upperParts: { BasePart } = {}
-	local lowerParts: { BasePart } = {}
+	createOrResetMotor6D("MechaWaistJoint", hrp, torsoAnchor, CFrame.new(0, 0.5, 0))
+	createOrResetMotor6D("MechaLeftHip", hrp, leftLegAnchor, CFrame.new(-0.8, -0.2, 0))
+	createOrResetMotor6D("MechaRightHip", hrp, rightLegAnchor, CFrame.new(0.8, -0.2, 0))
+
+	-- 3. Group and weld parts to their respective articulated anchors
+	local upperCount = 0
+	local leftCount = 0
+	local rightCount = 0
+	local pelvisCount = 0
 
 	for _, p in ipairs(clone:GetDescendants()) do
-		if p:IsA("BasePart") and p ~= torsoAnchor then
+		if p:IsA("BasePart") and p ~= torsoAnchor and p ~= leftLegAnchor and p ~= rightLegAnchor then
+			local name = string.lower(p.Name)
 			if isUpperBodyPart(p, modelCenterY) then
-				table.insert(upperParts, p)
+				local w = Instance.new("WeldConstraint")
+				w.Part0 = torsoAnchor
+				w.Part1 = p
+				w.Parent = p
+				upperCount += 1
 			else
-				table.insert(lowerParts, p)
+				-- Lower body: determine Left Leg vs Right Leg vs Pelvis
+				if string.find(name, "left") or string.find(name, "_l_") or string.find(name, "_l") or (p.Position.X < (modelCf.Position.X - 0.25)) then
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = leftLegAnchor
+					w.Part1 = p
+					w.Parent = p
+					leftCount += 1
+				elseif string.find(name, "right") or string.find(name, "_r_") or string.find(name, "_r") or (p.Position.X > (modelCf.Position.X + 0.25)) then
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = rightLegAnchor
+					w.Part1 = p
+					w.Parent = p
+					rightCount += 1
+				else
+					-- Central hips / pelvis
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = hrp
+					w.Part1 = p
+					w.Parent = p
+					pelvisCount += 1
+				end
 			end
 		end
-	end
-
-	-- Weld upper body parts to torsoAnchor
-	for _, p in ipairs(upperParts) do
-		local w = Instance.new("WeldConstraint")
-		w.Part0 = torsoAnchor
-		w.Part1 = p
-		w.Parent = p
-	end
-
-	-- Weld lower body (legs/hips) to HRP
-	for _, p in ipairs(lowerParts) do
-		local w = Instance.new("WeldConstraint")
-		w.Part0 = hrp
-		w.Part1 = p
-		w.Parent = p
 	end
 
 	clone.Name = "MechaAvatar"
 	clone.Parent = character
 
-	print(string.format("[PlayerMechaVisuals] Applied modular Mecha '%s' (Upper: %d, Lower: %d)", template.Name, #upperParts, #lowerParts))
+	print(string.format("[PlayerMechaVisuals] Articulated Mecha '%s' mounted (Torso: %d, LeftLeg: %d, RightLeg: %d, Pelvis: %d)",
+		template.Name, upperCount, leftCount, rightCount, pelvisCount))
 end
 
 return PlayerMechaVisuals
