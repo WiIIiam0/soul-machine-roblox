@@ -24,6 +24,14 @@ export type RewardCard = {
 	description: string,
 	icon: string,
 	iconFile: string?,
+	iconColor: Color3?,
+	isComposite: boolean?,
+	triggerIconFile: string?,
+	effectIconFile: string?,
+	triggerColor: Color3?,
+	effectColor: Color3?,
+	triggerTag: string?,
+	effectTag: string?,
 	tag: string?,
 	glyph: string?,
 	rarityColor: Color3,
@@ -46,35 +54,33 @@ local WEAPON_IDS = {
 	"Rifle", "Pompe", "Eventail", "Rocket", "DarkStorm", "FireMissile", "MissileMultiShot", "Taser",
 }
 
-local function getPassiveGlyph(pDef: PassivesData.PassiveDefinition): string
-	local tTags: { [string]: string } = {
-		OnEnemyKilled = "KILL",
-		OnDamageDealt = "HIT",
-		OnDamageTaken = "DEF",
-		OnHeal = "HEAL",
-		OnMove = "MOVE",
-		OnStandStill = "STILL",
-		OnCritHit = "CRIT",
-		OnLevelUp = "LVL",
-		OnOverdrive = "OVER",
-		OnGainXP = "XP",
-	}
-	local eTags: { [string]: string } = {
-		Heal = "REPAIR",
-		GainMaxHP = "HP+",
-		GainStatDamage = "DMG+",
-		GainStatSpeed = "SPD+",
-		GainStatFireRate = "CAD+",
-		GainCritChance = "CRT+",
-		GainStatArmor = "ARM+",
-		GainLifeSteal = "DRAIN+",
-		ChargeOverdrive = "OD+",
-		GainXP = "XP+",
-	}
-	local tg = tTags[pDef.trigger] or "SYS"
-	local eg = eTags[pDef.effect] or "PWR"
-	return string.format("[%s -> %s]", tg, eg)
-end
+local TRIGGER_SHORT_TAGS: { [string]: string } = {
+	OnEnemyKilled = "KILL",
+	OnDamageDealt = "HIT",
+	OnDamageTaken = "TANK",
+	OnHeal = "SOIN",
+	OnMove = "MOVE",
+	OnStandStill = "FIXE",
+	OnCritHit = "CRIT",
+	OnLevelUp = "NIV",
+	OnOverdrive = "OVER",
+	OnGainXP = "XP",
+	OnWaveStart = "VAG",
+	OnWeaponFire = "TIR",
+}
+
+local EFFECT_SHORT_TAGS: { [string]: string } = {
+	Heal = "SOIN",
+	GainMaxHP = "PV+",
+	GainStatDamage = "DMG+",
+	GainStatSpeed = "VIT+",
+	GainStatFireRate = "CAD+",
+	GainCritChance = "CRT+",
+	GainStatArmor = "ARM+",
+	GainLifeSteal = "VOL+",
+	ChargeOverdrive = "OD+",
+	GainXP = "XP+",
+}
 
 function RewardService.GenerateCards(player: Player): { RewardCard }
 	local cards: { RewardCard } = {}
@@ -103,6 +109,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 		local wDef = WeaponsData.GetWeapon(weaponId)
 		if wDef and rank < maxWeaponRank and rank < #wDef.ranks then
 			local nextRank = wDef.ranks[rank + 1]
+			local statColor = StatTypes.GetStatColor(wDef.uiStatColor)
 			table.insert(possibleWeaponCards, {
 				id = "WUpgrade_" .. weaponId,
 				category = "WEAPON",
@@ -111,9 +118,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 				description = string.format("Dégâts: %.0f | Projectiles: %d | Cadence: %.2fs", nextRank.damage, nextRank.projectileCount, nextRank.fireRate),
 				icon = wDef.icon,
 				iconFile = wDef.iconFile,
+				iconColor = statColor or Color3.new(1, 1, 1),
 				tag = wDef.tag or "[ ARME ]",
 				glyph = wDef.tag or "[ ARME ]",
-				rarityColor = Color3.fromRGB(0, 200, 255),
+				rarityColor = statColor or Color3.fromRGB(0, 200, 255),
 				weaponId = weaponId,
 			})
 		end
@@ -125,6 +133,7 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 			if wId ~= "StarterGun" and not equippedWeapons[wId] and MetaProgressionData.IsWeaponUnlocked(meta.totalXP, wId) then
 				local wDef = WeaponsData.GetWeapon(wId)
 				if wDef and #wDef.ranks > 0 then
+					local statColor = StatTypes.GetStatColor(wDef.uiStatColor)
 					table.insert(possibleWeaponCards, {
 						id = "WNew_" .. wId,
 						category = "WEAPON",
@@ -133,9 +142,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 						description = wDef.description,
 						icon = wDef.icon,
 						iconFile = wDef.iconFile,
+						iconColor = statColor or Color3.new(1, 1, 1),
 						tag = wDef.tag or "[ ARME ]",
 						glyph = wDef.tag or "[ ARME ]",
-						rarityColor = Color3.fromRGB(255, 200, 40),
+						rarityColor = statColor or Color3.fromRGB(255, 200, 40),
 						weaponId = wId,
 					})
 				end
@@ -170,9 +180,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 						description = conf.desc,
 						icon = conf.icon,
 						iconFile = conf.iconFile,
+						iconColor = conf.color,
 						tag = conf.tag or "[ MODULE ]",
 						glyph = conf.tag or "[ MODULE ]",
-						rarityColor = Color3.fromRGB(80, 255, 140),
+						rarityColor = conf.color or Color3.fromRGB(80, 255, 140),
 						statType = sKey,
 						statValue = bonus,
 					})
@@ -188,9 +199,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 					description = conf.desc,
 					icon = conf.icon,
 					iconFile = conf.iconFile,
+					iconColor = conf.color,
 					tag = conf.tag or "[ MODULE ]",
 					glyph = conf.tag or "[ MODULE ]",
-					rarityColor = Color3.fromRGB(80, 255, 140),
+					rarityColor = conf.color or Color3.fromRGB(80, 255, 140),
 					statType = sKey,
 					statValue = bonus,
 				})
@@ -233,6 +245,8 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 
 				if not alreadyOwned then
 					local dynamicDef = PassivesData.CreateDynamicPassive(t, e)
+					local trigColor = StatTypes.GetStatColor(dynamicDef.triggerScalingStat) or Color3.new(1, 1, 1)
+					local effColor = StatTypes.GetStatColor(dynamicDef.effectScalingStat) or Color3.new(1, 1, 1)
 					table.insert(possiblePassiveCards, {
 						id = dynamicDef.id,
 						category = "PASSIVE",
@@ -241,9 +255,16 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 						description = dynamicDef.description,
 						icon = dynamicDef.icon,
 						iconFile = dynamicDef.iconFile,
+						isComposite = true,
+						triggerIconFile = dynamicDef.triggerIconFile,
+						effectIconFile = dynamicDef.effectIconFile,
+						triggerColor = trigColor,
+						effectColor = effColor,
+						triggerTag = TRIGGER_SHORT_TAGS[t] or "TRG",
+						effectTag = EFFECT_SHORT_TAGS[e] or "EFF",
 						tag = "[ PASSIF ]",
 						glyph = string.format("[%s ➔ %s]", t, e),
-						rarityColor = Color3.fromRGB(220, 80, 255),
+						rarityColor = Color3.fromRGB(200, 100, 255),
 						passiveDef = dynamicDef,
 					})
 				end
@@ -275,9 +296,10 @@ function RewardService.GenerateCards(player: Player): { RewardCard }
 			description = fbConf.desc,
 			icon = fbConf.icon,
 			iconFile = fbConf.iconFile,
+			iconColor = fbConf.color,
 			tag = fbConf.tag or "[ MODULE ]",
 			glyph = fbConf.tag or "[ MODULE ]",
-			rarityColor = Color3.fromRGB(80, 255, 140),
+			rarityColor = fbConf.color or Color3.fromRGB(80, 255, 140),
 			statType = fallbackStat,
 			statValue = fbBonus,
 		})

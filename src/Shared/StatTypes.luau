@@ -1,7 +1,7 @@
 --!strict
--- StatTypes.luau: Statistics definitions, scaling values, and calculation helpers
+-- StatTypes.luau: Statistics definitions, exact Unity SampleScene.unity icons & statColors, and calculation helpers
 
-export type StatType = 
+export type StatType =
 	"MaxHP"
 	| "Speed"
 	| "DamageMultiplier"
@@ -42,93 +42,127 @@ local DEFAULT_STATS: PlayerStats = {
 }
 StatTypes.DEFAULT_STATS = DEFAULT_STATS
 
-local STAT_CONFIG: { [StatType]: { name: string, icon: string, iconFile: string, tag: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
+-- Exact RGB colors from Unity SampleScene.unity UIManager.statColors
+local STAT_COLORS: { [string]: Color3 } = {
+	MaxHP = Color3.fromRGB(136, 215, 134),
+	MaxHealth = Color3.fromRGB(136, 215, 134),
+	Speed = Color3.fromRGB(123, 118, 238),
+	DamageMultiplier = Color3.fromRGB(236, 142, 142),
+	FireRateMultiplier = Color3.fromRGB(133, 222, 236),
+	Armor = Color3.fromRGB(145, 122, 95),
+	CriticalChance = Color3.fromRGB(255, 250, 96),
+	PickupRadius = Color3.fromRGB(255, 177, 82),
+	LifeSteal = Color3.fromRGB(255, 153, 247),
+	BurnDamage = Color3.fromRGB(178, 34, 34),
+	RangeMultiplier = Color3.fromRGB(151, 88, 209),
+}
+StatTypes.STAT_COLORS = STAT_COLORS
+
+function StatTypes.GetStatColor(statKey: string?): Color3?
+	if not statKey or statKey == "None" or statKey == "" then
+		return nil
+	end
+	return STAT_COLORS[statKey]
+end
+
+-- Exact Sprite GUID mappings from Unity SampleScene.unity RewardManager
+local STAT_CONFIG: { [StatType]: { name: string, icon: string, iconFile: string, color: Color3, tag: string, perLevelBonus: number, format: (val: number) -> string, desc: string } } = {
 	MaxHP = {
 		name = "Points de Vie Max",
-		icon = "rbxassetid://10709791437",
-		iconFile = "CSFSimpleSkill3_C_256_01.png",
-		tag = "[ +PV COQUE ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_55.png",
+		color = STAT_COLORS.MaxHP,
+		tag = "PV+",
 		perLevelBonus = 20,
 		format = function(v) return string.format("+%.0f PV", v) end,
 		desc = "Augmente les points de vie maximaux de ton Mécha.",
 	},
 	Speed = {
 		name = "Propulsion / Vitesse",
-		icon = "rbxassetid://10709791130",
-		iconFile = "CSFSimpleSkill3_C_256_04.png",
-		tag = "[ +PROPULSION ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_05.png",
+		color = STAT_COLORS.Speed,
+		tag = "VIT+",
 		perLevelBonus = 2.0,
 		format = function(v) return string.format("+%.1f Vitesse", v) end,
 		desc = "Permet d'esquiver plus facilement les essaims.",
 	},
 	DamageMultiplier = {
 		name = "Puissance de Feu",
-		icon = "rbxassetid://10709791557",
-		iconFile = "CSFSimpleSkill3_C_256_02.png",
-		tag = "[ +PUISSANCE ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_23.png",
+		color = STAT_COLORS.DamageMultiplier,
+		tag = "DMG+",
 		perLevelBonus = 0.12,
 		format = function(v) return string.format("+%.0f%% Dégâts", v * 100) end,
 		desc = "Multiplie les dégâts infligés par toutes les armes.",
 	},
 	FireRateMultiplier = {
 		name = "Cadence de Tir",
-		icon = "rbxassetid://10709791334",
-		iconFile = "CSFSimpleSkill3_C_256_03.png",
-		tag = "[ +CADENCE ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_50.png",
+		color = STAT_COLORS.FireRateMultiplier,
+		tag = "CAD+",
 		perLevelBonus = 0.08,
 		format = function(v) return string.format("+%.0f%% Cadence", v * 100) end,
 		desc = "Réduit le temps de recharge entre chaque rafale.",
 	},
 	Armor = {
 		name = "Blindage / Armure",
-		icon = "rbxassetid://10709791281",
-		iconFile = "CSFSimpleSkill3_C_256_05.png",
-		tag = "[ +BLINDAGE ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_81.png",
+		color = STAT_COLORS.Armor,
+		tag = "ARM+",
 		perLevelBonus = 12,
 		format = function(v) return string.format("+%.0f Armure", v) end,
 		desc = "100 d'armure réduit les dégâts subis de 50%.",
 	},
 	CriticalChance = {
 		name = "Chances de Critique",
-		icon = "rbxassetid://10709791223",
-		iconFile = "CSFSimpleSkill3_C_256_06.png",
-		tag = "[ +CRITIQUE ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_80.png",
+		color = STAT_COLORS.CriticalChance,
+		tag = "CRT+",
 		perLevelBonus = 4,
 		format = function(v) return string.format("+%.0f%% Critique", v) end,
 		desc = "Chances d'infliger le double de dégâts (x2).",
 	},
 	PickupRadius = {
 		name = "Rayon Magnétique",
-		icon = "rbxassetid://10709791054",
-		iconFile = "CSFSimpleSkill3_C_256_07.png",
-		tag = "[ +AIMANT ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_68.png",
+		color = STAT_COLORS.PickupRadius,
+		tag = "AIM+",
 		perLevelBonus = 4,
 		format = function(v) return string.format("+%.0f Studs Rayon", v) end,
 		desc = "Aspire les gemmes d'XP de plus loin.",
 	},
 	LifeSteal = {
 		name = "Drain d'Énergie",
-		icon = "rbxassetid://10709791480",
-		iconFile = "CSFSimpleSkill3_C_256_09.png",
-		tag = "[ +DRAIN-PV ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_32.png",
+		color = STAT_COLORS.LifeSteal,
+		tag = "VOL+",
 		perLevelBonus = 0.02,
 		format = function(v) return string.format("+%.1f%% Vol de Vie", v * 100) end,
 		desc = "Convertit une partie des dégâts infligés en réparation de coque.",
 	},
 	BurnDamage = {
 		name = "Surcharge Thermique",
-		icon = "rbxassetid://10709791612",
-		iconFile = "CSFSimpleSkill3_C_256_10.png",
-		tag = "[ +THERMIQUE ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_84.png",
+		color = STAT_COLORS.BurnDamage,
+		tag = "FEU+",
 		perLevelBonus = 2.0,
 		format = function(v) return string.format("+%.1f Dégâts Brûlure", v) end,
 		desc = "Renforce les dégâts continus de feu par tic.",
 	},
 	RangeMultiplier = {
 		name = "Portée des Radars",
-		icon = "rbxassetid://10709791667",
-		iconFile = "CSFSimpleSkill3_C_256_11.png",
-		tag = "[ +RADAR ]",
+		icon = "",
+		iconFile = "CSFSimpleSkill3_C_256_63.png",
+		color = STAT_COLORS.RangeMultiplier,
+		tag = "PRT+",
 		perLevelBonus = 0.15,
 		format = function(v) return string.format("+%.0f%% Portée", v * 100) end,
 		desc = "Permet de verrouiller et toucher les ennemis à plus grande distance.",

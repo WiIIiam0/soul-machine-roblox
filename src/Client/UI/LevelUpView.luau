@@ -180,29 +180,100 @@ function LevelUpView.Create(parentGui: ScreenGui, onSelectChoice: (index: number
 			iStroke.Thickness = 1.5
 			iStroke.Parent = iconBox
 
-			local iconBadge = Instance.new("TextLabel")
-			iconBadge.Name = "IconBadge"
-			iconBadge.Size = UDim2.new(1, -4, 1, -4)
-			iconBadge.Position = UDim2.new(0, 2, 0, 2)
-			iconBadge.BackgroundTransparency = 1
-			iconBadge.Text = cardData.tag or string.sub(tostring(cardData.title or ""), 1, 6):upper()
-			iconBadge.TextColor3 = rarityColor
-			iconBadge.Font = Enum.Font.GothamBlack
-			iconBadge.TextSize = 9
-			iconBadge.TextWrapped = true
-			iconBadge.ZIndex = 1
-			iconBadge.Parent = iconBox
+			if cardData.isComposite == true then
+				iconBox.ClipsDescendants = true
 
-			local resolvedImage = TextureResolver.Resolve(cardData.iconFile, cardData.icon)
-			if resolvedImage and resolvedImage ~= "" then
-				local iconImg = Instance.new("ImageLabel")
-				iconImg.Size = UDim2.new(1, -6, 1, -6)
-				iconImg.Position = UDim2.new(0, 3, 0, 3)
-				iconImg.BackgroundTransparency = 1
-				iconImg.Image = resolvedImage
-				iconImg.ZIndex = 2
-				iconImg.Parent = iconBox
-				iconBadge.Visible = false
+				local diag = Instance.new("Frame")
+				diag.Name = "Diagonal"
+				diag.Size = UDim2.new(1.42, 0, 0, 1)
+				diag.AnchorPoint = Vector2.new(0.5, 0.5)
+				diag.Position = UDim2.new(0.5, 0, 0.5, 0)
+				diag.Rotation = -45
+				diag.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				diag.BackgroundTransparency = 0.65
+				diag.BorderSizePixel = 0
+				diag.ZIndex = 2
+				diag.Parent = iconBox
+
+				local tRes = TextureResolver.Resolve(cardData.triggerIconFile, nil)
+				local trigColor = cardData.triggerColor or Color3.new(1, 1, 1)
+				if tRes and tRes ~= "" then
+					local tImg = Instance.new("ImageLabel")
+					tImg.Name = "TriggerIcon"
+					tImg.Size = UDim2.new(0, 24, 0, 24)
+					tImg.Position = UDim2.new(0, 3, 0, 3)
+					tImg.BackgroundTransparency = 1
+					tImg.Image = tRes
+					tImg.ImageColor3 = trigColor
+					tImg.ZIndex = 3
+					tImg.Parent = iconBox
+				else
+					local tLbl = Instance.new("TextLabel")
+					tLbl.Name = "TriggerTag"
+					tLbl.Size = UDim2.new(0, 24, 0, 24)
+					tLbl.Position = UDim2.new(0, 2, 0, 2)
+					tLbl.BackgroundTransparency = 1
+					tLbl.TextColor3 = trigColor
+					tLbl.Font = Enum.Font.GothamBlack
+					tLbl.TextSize = 9
+					tLbl.Text = cardData.triggerTag or "TRG"
+					tLbl.ZIndex = 3
+					tLbl.Parent = iconBox
+				end
+
+				local eRes = TextureResolver.Resolve(cardData.effectIconFile, nil)
+				local effColor = cardData.effectColor or Color3.new(1, 1, 1)
+				if eRes and eRes ~= "" then
+					local eImg = Instance.new("ImageLabel")
+					eImg.Name = "EffectIcon"
+					eImg.Size = UDim2.new(0, 24, 0, 24)
+					eImg.Position = UDim2.new(1, -27, 1, -27)
+					eImg.BackgroundTransparency = 1
+					eImg.Image = eRes
+					eImg.ImageColor3 = effColor
+					eImg.ZIndex = 3
+					eImg.Parent = iconBox
+				else
+					local eLbl = Instance.new("TextLabel")
+					eLbl.Name = "EffectTag"
+					eLbl.Size = UDim2.new(0, 24, 0, 24)
+					eLbl.Position = UDim2.new(1, -26, 1, -26)
+					eLbl.BackgroundTransparency = 1
+					eLbl.TextColor3 = effColor
+					eLbl.Font = Enum.Font.GothamBlack
+					eLbl.TextSize = 9
+					eLbl.Text = cardData.effectTag or "EFF"
+					eLbl.ZIndex = 3
+					eLbl.Parent = iconBox
+				end
+			else
+				iconBox.ClipsDescendants = false
+
+				local iconBadge = Instance.new("TextLabel")
+				iconBadge.Name = "IconBadge"
+				iconBadge.Size = UDim2.new(1, -4, 1, -4)
+				iconBadge.Position = UDim2.new(0, 2, 0, 2)
+				iconBadge.BackgroundTransparency = 1
+				iconBadge.Text = cardData.tag or string.sub(tostring(cardData.title or ""), 1, 6):upper()
+				iconBadge.TextColor3 = cardData.iconColor or rarityColor
+				iconBadge.Font = Enum.Font.GothamBlack
+				iconBadge.TextSize = 9
+				iconBadge.TextWrapped = true
+				iconBadge.ZIndex = 1
+				iconBadge.Parent = iconBox
+
+				local resolvedImage = TextureResolver.Resolve(cardData.iconFile, cardData.icon)
+				if resolvedImage and resolvedImage ~= "" then
+					local iconImg = Instance.new("ImageLabel")
+					iconImg.Size = UDim2.new(1, -6, 1, -6)
+					iconImg.Position = UDim2.new(0, 3, 0, 3)
+					iconImg.BackgroundTransparency = 1
+					iconImg.Image = resolvedImage
+					iconImg.ImageColor3 = cardData.iconColor or Color3.new(1, 1, 1)
+					iconImg.ZIndex = 2
+					iconImg.Parent = iconBox
+					iconBadge.Visible = false
+				end
 			end
 
 			local title = Instance.new("TextLabel")
@@ -318,29 +389,100 @@ function LevelUpView.Create(parentGui: ScreenGui, onSelectChoice: (index: number
 			iStroke.Transparency = 0.3
 			iStroke.Parent = iconBox
 
-			local iconBadge = Instance.new("TextLabel")
-			iconBadge.Name = "IconBadge"
-			iconBadge.Size = UDim2.new(1, -8, 1, -8)
-			iconBadge.Position = UDim2.new(0, 4, 0, 4)
-			iconBadge.BackgroundTransparency = 1
-			iconBadge.Text = cardData.tag or string.sub(tostring(cardData.title or ""), 1, 10):upper()
-			iconBadge.TextColor3 = rarityColor
-			iconBadge.Font = Enum.Font.GothamBlack
-			iconBadge.TextSize = 11
-			iconBadge.TextWrapped = true
-			iconBadge.ZIndex = 1
-			iconBadge.Parent = iconBox
+			if cardData.isComposite == true then
+				iconBox.ClipsDescendants = true
 
-			local resolvedImage = TextureResolver.Resolve(cardData.iconFile, cardData.icon)
-			if resolvedImage and resolvedImage ~= "" then
-				local iconImg = Instance.new("ImageLabel")
-				iconImg.Size = UDim2.new(1, -10, 1, -10)
-				iconImg.Position = UDim2.new(0, 5, 0, 5)
-				iconImg.BackgroundTransparency = 1
-				iconImg.Image = resolvedImage
-				iconImg.ZIndex = 2
-				iconImg.Parent = iconBox
-				iconBadge.Visible = false
+				local diag = Instance.new("Frame")
+				diag.Name = "Diagonal"
+				diag.Size = UDim2.new(1.42, 0, 0, 1.5)
+				diag.AnchorPoint = Vector2.new(0.5, 0.5)
+				diag.Position = UDim2.new(0.5, 0, 0.5, 0)
+				diag.Rotation = -45
+				diag.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				diag.BackgroundTransparency = 0.65
+				diag.BorderSizePixel = 0
+				diag.ZIndex = 2
+				diag.Parent = iconBox
+
+				local tRes = TextureResolver.Resolve(cardData.triggerIconFile, nil)
+				local trigColor = cardData.triggerColor or Color3.new(1, 1, 1)
+				if tRes and tRes ~= "" then
+					local tImg = Instance.new("ImageLabel")
+					tImg.Name = "TriggerIcon"
+					tImg.Size = UDim2.new(0, 34, 0, 34)
+					tImg.Position = UDim2.new(0, 4, 0, 4)
+					tImg.BackgroundTransparency = 1
+					tImg.Image = tRes
+					tImg.ImageColor3 = trigColor
+					tImg.ZIndex = 3
+					tImg.Parent = iconBox
+				else
+					local tLbl = Instance.new("TextLabel")
+					tLbl.Name = "TriggerTag"
+					tLbl.Size = UDim2.new(0, 34, 0, 34)
+					tLbl.Position = UDim2.new(0, 3, 0, 3)
+					tLbl.BackgroundTransparency = 1
+					tLbl.TextColor3 = trigColor
+					tLbl.Font = Enum.Font.GothamBlack
+					tLbl.TextSize = 11
+					tLbl.Text = cardData.triggerTag or "TRG"
+					tLbl.ZIndex = 3
+					tLbl.Parent = iconBox
+				end
+
+				local eRes = TextureResolver.Resolve(cardData.effectIconFile, nil)
+				local effColor = cardData.effectColor or Color3.new(1, 1, 1)
+				if eRes and eRes ~= "" then
+					local eImg = Instance.new("ImageLabel")
+					eImg.Name = "EffectIcon"
+					eImg.Size = UDim2.new(0, 34, 0, 34)
+					eImg.Position = UDim2.new(1, -38, 1, -38)
+					eImg.BackgroundTransparency = 1
+					eImg.Image = eRes
+					eImg.ImageColor3 = effColor
+					eImg.ZIndex = 3
+					eImg.Parent = iconBox
+				else
+					local eLbl = Instance.new("TextLabel")
+					eLbl.Name = "EffectTag"
+					eLbl.Size = UDim2.new(0, 34, 0, 34)
+					eLbl.Position = UDim2.new(1, -37, 1, -37)
+					eLbl.BackgroundTransparency = 1
+					eLbl.TextColor3 = effColor
+					eLbl.Font = Enum.Font.GothamBlack
+					eLbl.TextSize = 11
+					eLbl.Text = cardData.effectTag or "EFF"
+					eLbl.ZIndex = 3
+					eLbl.Parent = iconBox
+				end
+			else
+				iconBox.ClipsDescendants = false
+
+				local iconBadge = Instance.new("TextLabel")
+				iconBadge.Name = "IconBadge"
+				iconBadge.Size = UDim2.new(1, -8, 1, -8)
+				iconBadge.Position = UDim2.new(0, 4, 0, 4)
+				iconBadge.BackgroundTransparency = 1
+				iconBadge.Text = cardData.tag or string.sub(tostring(cardData.title or ""), 1, 10):upper()
+				iconBadge.TextColor3 = cardData.iconColor or rarityColor
+				iconBadge.Font = Enum.Font.GothamBlack
+				iconBadge.TextSize = 11
+				iconBadge.TextWrapped = true
+				iconBadge.ZIndex = 1
+				iconBadge.Parent = iconBox
+
+				local resolvedImage = TextureResolver.Resolve(cardData.iconFile, cardData.icon)
+				if resolvedImage and resolvedImage ~= "" then
+					local iconImg = Instance.new("ImageLabel")
+					iconImg.Size = UDim2.new(1, -10, 1, -10)
+					iconImg.Position = UDim2.new(0, 5, 0, 5)
+					iconImg.BackgroundTransparency = 1
+					iconImg.Image = resolvedImage
+					iconImg.ImageColor3 = cardData.iconColor or Color3.new(1, 1, 1)
+					iconImg.ZIndex = 2
+					iconImg.Parent = iconBox
+					iconBadge.Visible = false
+				end
 			end
 
 			local subLabel = Instance.new("TextLabel")

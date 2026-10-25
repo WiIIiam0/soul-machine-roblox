@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local WeaponsData = require(Shared:WaitForChild("WeaponsData"))
 local StatTypes = require(Shared:WaitForChild("StatTypes"))
+local PassivesData = require(Shared:WaitForChild("PassivesData"))
 
 local TextureResolver = require(script.Parent.TextureResolver)
 
@@ -18,19 +19,32 @@ local INV_SLOT_STEP = 36
 local INV_PAD_X = 10
 local INV_HEIGHT = 120
 
-local PASSIVE_SHORT_TAGS: { [string]: string } = {
+local PASSIVE_TRIGGER_TAGS: { [string]: string } = {
 	OnEnemyKilled = "KILL",
 	OnDamageDealt = "HIT",
 	OnDamageTaken = "TANK",
-	OnHeal = "HEAL",
+	OnHeal = "SOIN",
 	OnMove = "MOVE",
-	OnStandStill = "IDLE",
+	OnStandStill = "FIXE",
 	OnCritHit = "CRIT",
-	OnLevelUp = "LVL",
+	OnLevelUp = "NIV",
 	OnOverdrive = "OVER",
 	OnGainXP = "XP",
-	OnWaveStart = "WAVE",
-	OnWeaponFire = "FIRE",
+	OnWaveStart = "VAG",
+	OnWeaponFire = "TIR",
+}
+
+local PASSIVE_EFFECT_TAGS: { [string]: string } = {
+	Heal = "SOIN",
+	GainMaxHP = "PV+",
+	GainStatDamage = "DMG+",
+	GainStatSpeed = "VIT+",
+	GainStatFireRate = "CAD+",
+	GainCritChance = "CRT+",
+	GainStatArmor = "ARM+",
+	GainLifeSteal = "VOL+",
+	ChargeOverdrive = "OD+",
+	GainXP = "XP+",
 }
 
 export type SlotEntry = {
@@ -41,6 +55,15 @@ export type SlotEntry = {
 	glyph: string?,
 	icon: string?,
 	iconFile: string?,
+	iconColor: Color3?,
+	borderColor: Color3?,
+	isComposite: boolean?,
+	triggerIconFile: string?,
+	effectIconFile: string?,
+	triggerColor: Color3?,
+	effectColor: Color3?,
+	triggerTag: string?,
+	effectTag: string?,
 }
 
 export type InventoryController = {
@@ -52,7 +75,7 @@ export type InventoryController = {
 	UpdateStats: (statCardLevels: { [string]: number }?) -> (),
 }
 
-local function populateRowSlots(container: Frame, maxCount: number, borderColor: Color3, items: { SlotEntry })
+local function populateRowSlots(container: Frame, maxCount: number, defaultBorderColor: Color3, items: { SlotEntry })
 	for _, child in ipairs(container:GetChildren()) do
 		if child:IsA("Frame") then
 			child:Destroy()
@@ -77,35 +100,112 @@ local function populateRowSlots(container: Frame, maxCount: number, borderColor:
 
 		local item = items[i]
 		if item then
-			bStroke.Color = borderColor
+			local slotBorder = item.borderColor or defaultBorderColor
+			bStroke.Color = slotBorder
 			bStroke.Transparency = 0.2
 			box.BackgroundColor3 = Color3.fromRGB(22, 30, 48)
 
-			local rawTag = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
-			local tagLabel = Instance.new("TextLabel")
-			tagLabel.Name = "Tag"
-			tagLabel.Size = UDim2.new(1, -2, 1, -2)
-			tagLabel.Position = UDim2.new(0, 1, 0, 1)
-			tagLabel.BackgroundTransparency = 1
-			tagLabel.TextColor3 = borderColor
-			tagLabel.Font = Enum.Font.GothamBlack
-			tagLabel.TextSize = 8
-			tagLabel.TextWrapped = false
-			tagLabel.TextTruncate = Enum.TextTruncate.None
-			tagLabel.Text = string.sub(rawTag, 1, 4)
-			tagLabel.ZIndex = 1
-			tagLabel.Parent = box
+			if item.isComposite == true then
+				box.ClipsDescendants = true
 
-			local resolved = TextureResolver.Resolve(item.iconFile, item.icon)
-			if resolved and resolved ~= "" then
-				local iconImg = Instance.new("ImageLabel")
-				iconImg.Size = UDim2.new(1, -4, 1, -4)
-				iconImg.Position = UDim2.new(0, 2, 0, 2)
-				iconImg.BackgroundTransparency = 1
-				iconImg.Image = resolved
-				iconImg.ZIndex = 2
-				iconImg.Parent = box
-				tagLabel.Visible = false
+				-- Unity-style -45deg diagonal separator line (/)
+				local diag = Instance.new("Frame")
+				diag.Name = "Diagonal"
+				diag.Size = UDim2.new(1.42, 0, 0, 1)
+				diag.AnchorPoint = Vector2.new(0.5, 0.5)
+				diag.Position = UDim2.new(0.5, 0, 0.5, 0)
+				diag.Rotation = -45
+				diag.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				diag.BackgroundTransparency = 0.65
+				diag.BorderSizePixel = 0
+				diag.ZIndex = 2
+				diag.Parent = box
+
+				-- Trigger icon (top-left)
+				local tRes = TextureResolver.Resolve(item.triggerIconFile, nil)
+				local trigColor = item.triggerColor or Color3.new(1, 1, 1)
+				if tRes and tRes ~= "" then
+					local tImg = Instance.new("ImageLabel")
+					tImg.Name = "TriggerIcon"
+					tImg.Size = UDim2.new(0, 13, 0, 13)
+					tImg.Position = UDim2.new(0, 2, 0, 2)
+					tImg.BackgroundTransparency = 1
+					tImg.Image = tRes
+					tImg.ImageColor3 = trigColor
+					tImg.ZIndex = 3
+					tImg.Parent = box
+				else
+					local tLbl = Instance.new("TextLabel")
+					tLbl.Name = "TriggerTag"
+					tLbl.Size = UDim2.new(0, 14, 0, 13)
+					tLbl.Position = UDim2.new(0, 1, 0, 1)
+					tLbl.BackgroundTransparency = 1
+					tLbl.TextColor3 = trigColor
+					tLbl.Font = Enum.Font.GothamBlack
+					tLbl.TextSize = 7
+					tLbl.TextWrapped = false
+					tLbl.Text = item.triggerTag or "TRG"
+					tLbl.ZIndex = 3
+					tLbl.Parent = box
+				end
+
+				-- Effect icon (bottom-right)
+				local eRes = TextureResolver.Resolve(item.effectIconFile, nil)
+				local effColor = item.effectColor or Color3.new(1, 1, 1)
+				if eRes and eRes ~= "" then
+					local eImg = Instance.new("ImageLabel")
+					eImg.Name = "EffectIcon"
+					eImg.Size = UDim2.new(0, 13, 0, 13)
+					eImg.Position = UDim2.new(1, -15, 1, -15)
+					eImg.BackgroundTransparency = 1
+					eImg.Image = eRes
+					eImg.ImageColor3 = effColor
+					eImg.ZIndex = 3
+					eImg.Parent = box
+				else
+					local eLbl = Instance.new("TextLabel")
+					eLbl.Name = "EffectTag"
+					eLbl.Size = UDim2.new(0, 14, 0, 13)
+					eLbl.Position = UDim2.new(1, -15, 1, -14)
+					eLbl.BackgroundTransparency = 1
+					eLbl.TextColor3 = effColor
+					eLbl.Font = Enum.Font.GothamBlack
+					eLbl.TextSize = 7
+					eLbl.TextWrapped = false
+					eLbl.Text = item.effectTag or "EFF"
+					eLbl.ZIndex = 3
+					eLbl.Parent = box
+				end
+			else
+				box.ClipsDescendants = false
+
+				local rawTag = item.tag or item.glyph or string.sub(item.name, 1, 4):upper()
+				local tagLabel = Instance.new("TextLabel")
+				tagLabel.Name = "Tag"
+				tagLabel.Size = UDim2.new(1, -2, 1, -2)
+				tagLabel.Position = UDim2.new(0, 1, 0, 1)
+				tagLabel.BackgroundTransparency = 1
+				tagLabel.TextColor3 = item.iconColor or slotBorder
+				tagLabel.Font = Enum.Font.GothamBlack
+				tagLabel.TextSize = 8
+				tagLabel.TextWrapped = false
+				tagLabel.TextTruncate = Enum.TextTruncate.None
+				tagLabel.Text = string.sub(rawTag, 1, 4)
+				tagLabel.ZIndex = 1
+				tagLabel.Parent = box
+
+				local resolved = TextureResolver.Resolve(item.iconFile, item.icon)
+				if resolved and resolved ~= "" then
+					local iconImg = Instance.new("ImageLabel")
+					iconImg.Size = UDim2.new(1, -4, 1, -4)
+					iconImg.Position = UDim2.new(0, 2, 0, 2)
+					iconImg.BackgroundTransparency = 1
+					iconImg.Image = resolved
+					iconImg.ImageColor3 = item.iconColor or Color3.new(1, 1, 1)
+					iconImg.ZIndex = 2
+					iconImg.Parent = box
+					tagLabel.Visible = false
+				end
 			end
 
 			if item.rank and item.rank > 0 then
@@ -120,7 +220,7 @@ local function populateRowSlots(container: Frame, maxCount: number, borderColor:
 				rankBadge.TextSize = 8
 				rankBadge.TextWrapped = false
 				rankBadge.Text = if item.maxRank and item.maxRank > 1 then string.format("%d/%d", item.rank, item.maxRank) else tostring(item.rank)
-				rankBadge.ZIndex = 3
+				rankBadge.ZIndex = 4
 				rankBadge.Parent = box
 
 				local rCorner = Instance.new("UICorner")
@@ -128,6 +228,7 @@ local function populateRowSlots(container: Frame, maxCount: number, borderColor:
 				rCorner.Parent = rankBadge
 			end
 		else
+			box.ClipsDescendants = false
 			box.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
 			bStroke.Color = Color3.fromRGB(45, 55, 75)
 			bStroke.Transparency = 0.65
@@ -296,6 +397,8 @@ function InventoryView.Create(parentGui: ScreenGui, bottomOffset: number): Inven
 
 		for wId, rank in pairs(weaponsMap) do
 			local wDef = WeaponsData.GetWeapon(wId)
+			local statColor = StatTypes.GetStatColor(wDef and wDef.uiStatColor)
+			local color = statColor or Color3.fromRGB(255, 80, 80)
 			if wId == "StarterGun" then
 				hasTemp = true
 				tempIcon = if wDef then wDef.icon else nil
@@ -308,6 +411,8 @@ function InventoryView.Create(parentGui: ScreenGui, bottomOffset: number): Inven
 					tag = if wDef and wDef.tag then string.gsub(wDef.tag, "[%[%]%s]", "") else string.sub(wId, 1, 4):upper(),
 					icon = if wDef then wDef.icon else nil,
 					iconFile = if wDef then wDef.iconFile else nil,
+					iconColor = statColor or Color3.new(1, 1, 1),
+					borderColor = color,
 				})
 			end
 		end
@@ -325,6 +430,7 @@ function InventoryView.Create(parentGui: ScreenGui, bottomOffset: number): Inven
 			local res = TextureResolver.Resolve(tempIconFile, tempIcon)
 			if res and res ~= "" then
 				twbIcon.Image = res
+				twbIcon.ImageColor3 = Color3.new(1, 1, 1)
 				twbTag.Visible = false
 			else
 				twbTag.Visible = true
@@ -341,14 +447,32 @@ function InventoryView.Create(parentGui: ScreenGui, bottomOffset: number): Inven
 	local function updatePassives(passivesList: { any })
 		local pList: { SlotEntry } = {}
 		for _, p in ipairs(passivesList) do
-			local shortTag = PASSIVE_SHORT_TAGS[tostring(p.trigger or "")] or "PASF"
+			local trig = p.trigger
+			local eff = p.effect
+			local tIcon = p.triggerIconFile or PassivesData.GetTriggerIconFile(trig)
+			local eIcon = p.effectIconFile or PassivesData.GetEffectIconFile(eff)
+			local tStat = p.triggerScalingStat or PassivesData.GetTriggerScalingStat(trig)
+			local eStat = p.effectScalingStat or PassivesData.GetEffectScalingStat(eff)
+			local tCol = StatTypes.GetStatColor(tStat) or Color3.new(1, 1, 1)
+			local eCol = StatTypes.GetStatColor(eStat) or Color3.new(1, 1, 1)
+			local tTag = PASSIVE_TRIGGER_TAGS[tostring(trig or "")] or "TRG"
+			local eTag = PASSIVE_EFFECT_TAGS[tostring(eff or "")] or "EFF"
+
 			table.insert(pList, {
 				name = p.name or "Passif",
 				rank = 0,
 				maxRank = 0,
-				tag = shortTag,
+				tag = tTag,
 				icon = p.icon,
-				iconFile = p.iconFile,
+				iconFile = eIcon,
+				isComposite = true,
+				triggerIconFile = tIcon,
+				effectIconFile = eIcon,
+				triggerColor = tCol,
+				effectColor = eCol,
+				triggerTag = tTag,
+				effectTag = eTag,
+				borderColor = Color3.fromRGB(200, 150, 255),
 			})
 		end
 		lastPassives = pList
@@ -365,6 +489,7 @@ function InventoryView.Create(parentGui: ScreenGui, bottomOffset: number): Inven
 			if currentLvl and currentLvl > 0 then
 				local conf = StatTypes.STAT_CONFIG[sKey]
 				local tag = if conf and conf.tag then string.gsub(conf.tag, "[%[%]%s]", "") else string.sub(sKey, 1, 4):upper()
+				local color = conf.color or Color3.fromRGB(50, 255, 120)
 				table.insert(sList, {
 					name = sKey,
 					rank = currentLvl,
@@ -372,6 +497,8 @@ function InventoryView.Create(parentGui: ScreenGui, bottomOffset: number): Inven
 					tag = tag,
 					icon = if conf then conf.icon else nil,
 					iconFile = if conf then conf.iconFile else nil,
+					iconColor = color,
+					borderColor = color,
 				})
 			end
 		end

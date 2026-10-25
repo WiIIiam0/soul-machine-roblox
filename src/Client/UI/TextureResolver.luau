@@ -43,7 +43,7 @@ function TextureResolver.Resolve(iconFile: string?, rawIcon: string?): string?
 		return textureCache[cleanLower]
 	end
 
-	local numMatch = string.match(cleanLower, "%d+_%d+$") or string.match(cleanLower, "%d+$")
+	local spriteNum = tonumber(string.match(cleanLower, "(%d+)$"))
 
 	local candidates = {
 		ReplicatedStorage:FindFirstChild("Icons"),
@@ -68,9 +68,10 @@ function TextureResolver.Resolve(iconFile: string?, rawIcon: string?): string?
 		end
 	end
 
+	-- Pass 1: Exact name match across all descendants
 	for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
-		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
+		if dLower == cleanLower then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
@@ -81,11 +82,42 @@ function TextureResolver.Resolve(iconFile: string?, rawIcon: string?): string?
 
 	for _, desc in ipairs(Workspace:GetDescendants()) do
 		local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
-		if dLower == cleanLower or string.find(dLower, cleanLower, 1, true) or (numMatch and string.find(dLower, numMatch, 1, true)) then
+		if dLower == cleanLower then
 			local tex = extractTextureString(desc)
 			if tex then
 				textureCache[cleanLower] = tex
 				return tex
+			end
+		end
+	end
+
+	-- Pass 2: Exact trailing sprite index match (e.g. "05" -> 5 vs "50" -> 50, avoiding substring clashes)
+	if spriteNum then
+		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+			local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
+			local dNum = tonumber(string.match(dLower, "(%d+)$"))
+			if dNum == spriteNum then
+				if string.find(dLower, "skill", 1, true) or string.find(dLower, "csf", 1, true) or dLower == tostring(spriteNum) or dLower == string.format("%02d", spriteNum) then
+					local tex = extractTextureString(desc)
+					if tex then
+						textureCache[cleanLower] = tex
+						return tex
+					end
+				end
+			end
+		end
+
+		for _, desc in ipairs(Workspace:GetDescendants()) do
+			local dLower = string.lower(string.gsub(desc.Name, "%.png$", ""))
+			local dNum = tonumber(string.match(dLower, "(%d+)$"))
+			if dNum == spriteNum then
+				if string.find(dLower, "skill", 1, true) or string.find(dLower, "csf", 1, true) or dLower == tostring(spriteNum) or dLower == string.format("%02d", spriteNum) then
+					local tex = extractTextureString(desc)
+					if tex then
+						textureCache[cleanLower] = tex
+						return tex
+					end
+				end
 			end
 		end
 	end
