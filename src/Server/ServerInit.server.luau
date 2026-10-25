@@ -23,6 +23,7 @@ local XPService = require(script.Parent.XPService)
 local PassiveService = require(script.Parent.PassiveService)
 local MetaProgressionService = require(script.Parent.MetaProgressionService)
 local EnemyDirector = require(script.Parent.EnemyDirector)
+local PlayerMechaVisuals = require(script.Parent.PlayerMechaVisuals)
 
 print("[SoulMachine / BrotatoRoblox] Initializing Multi-Zone Server Systems...")
 
@@ -71,6 +72,9 @@ local function setupPlayer(player: Player)
 
 			-- Spawn léger décalage aléatoire autour du centre pour la coop multi-joueurs
 			hrp.CFrame = CFrame.new(math.random(-6, 6), 4, math.random(-6, 6))
+
+			-- Transform avatar into custom 3D Mecha from ReplicatedStorage.Mech
+			PlayerMechaVisuals.Apply(character)
 
 			-- 3 secondes d'immunité + non-aggro à l'arrivée dans la zone (déplacement libre)
 			PlayerStatsManager.GrantSpawnProtection(player, 3.0)
