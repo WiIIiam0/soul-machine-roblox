@@ -44,18 +44,18 @@ if not musicGroup then
 	musicGroup.Parent = soundGroupFolder
 end
 
--- Sound asset cache with verified classic Roblox SFX (clean, balanced volume)
+-- Sound asset cache (aucun vieux son Roblox 2007 d'explosion/impact/mort forcé)
 local SOUND_PRESETS: { [string]: string } = {
-	LaserShoot = "rbxassetid://130113322",   -- Official classic Roblox laser fire
+	LaserShoot = "rbxassetid://130113322",
 	HeavyShoot = "rbxassetid://130113322",
-	Explosion = "rbxassetid://12222084",     -- Official classic Roblox explosion
-	PlayerHit = "rbxassetid://12222216",     -- Official classic hit sound
-	BurnTransfer = "rbxassetid://130113322",
-	LevelUp = "rbxassetid://130788893",      -- Official chime
+	Explosion = "",
+	PlayerHit = "",
+	BurnTransfer = "",
+	LevelUp = "rbxassetid://130788893",
 	GlobalLevelUp = "rbxassetid://130788893",
 	OverdriveStart = "rbxassetid://130788893",
-	OverdriveEnd = "rbxassetid://12222084",
-	PassiveProc = "rbxassetid://12221967",
+	OverdriveEnd = "",
+	PassiveProc = "",
 	CardSelect = "rbxassetid://12221967",
 	MusicTrack = "",
 }
@@ -147,10 +147,11 @@ if projectilesFolder then
 end
 
 -- --- 2. COMBAT & VFX EVENTS SFX ---
+-- En accord avec Unity TheSwarm (EnemyHealth.cs), la mort d'un ennemi ("EnemyDeath") ne joue AUCUN bruitage.
 local vfxEvent = Remotes.GetEvent("VFXEvent")
 vfxEvent.OnClientEvent:Connect(function(eventType: string, ...: any)
-	if eventType == "Explosion" or eventType == "EnemyDeath" then
-		playSFX("Explosion", "explosionCrunch_000", 0.35, 0.9 + math.random() * 0.2)
+	if eventType == "Explosion" then
+		playSFX("Explosion", "explosionCrunch_000", 0.30, 0.9 + math.random() * 0.2)
 	elseif eventType == "BurnTransfer" then
 		playSFX("BurnTransfer", "laserRetro_000", 0.28, 1.2)
 	elseif eventType == "OverdriveStart" then
