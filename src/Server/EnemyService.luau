@@ -78,13 +78,13 @@ end
 local cachedTemplates: { [string]: Model? } = {}
 
 local KEYWORD_MAPPINGS: { [string]: { string } } = {
-	ScoutDrone = { "drone_worker", "droneworker", "cockpit_worker", "worker", "farmer", "scout", "minion_blue_melee", "minion_red_melee", "minion_melee" },
-	AssaultMecha = { "drone_fighter", "dronefighter", "copter_fighter", "fighter", "assault", "gunner", "shooter", "minion_blue_ranged", "minion_red_ranged", "minion_ranged" },
-	SniperBot = { "sniper", "turret", "laserbot", "blaster" },
-	HeavyJuggernaut = { "spider", "tank", "heavy", "juggernaut", "brute", "colosse" },
+	ScoutDrone = { "drone_worker", "droneworker", "cockpit_worker", "worker", "farmer", "scout", "minion_blue_melee", "minion_red_melee", "minion_melee", "enemy1" },
+	AssaultMecha = { "drone_fighter", "dronefighter", "copter_fighter", "fighter", "assault", "gunner", "shooter", "minion_blue_ranged", "minion_red_ranged", "minion_ranged", "enemy3" },
+	SniperBot = { "space_drone", "spacedrone", "sniper", "turret", "laserbot", "blaster", "shocker", "enemy2", "enemy5", "enemy6" },
+	HeavyJuggernaut = { "spider", "tank", "heavy", "juggernaut", "brute", "colosse", "enemy4" },
 	KamikazeRoller = { "roller", "kamikaze", "sphere", "bomb" },
 	OverlordBoss = { "boss", "goliath", "overlord", "titan" },
-	MetaDrone = { "metadrone", "goldendrone", "golddrone", "lootdrone" },
+	MetaDrone = { "enemyfarm", "base_turret", "metadrone", "goldendrone", "golddrone", "lootdrone" },
 }
 
 local function findCustomTemplate(enemyId: string): Model?
