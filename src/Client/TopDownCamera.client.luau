@@ -162,6 +162,19 @@ player.CharacterAdded:Connect(setupCharacter)
 
 local lastAimDir: Vector3? = nil
 
+local function isPlayerFrozenInLevelUp(): boolean
+	if player:GetAttribute("IsLevelUpFrozen") == true then
+		return true
+	end
+	local pGui = player:FindFirstChild("PlayerGui")
+	local hud = if pGui then pGui:FindFirstChild("SoulMachineHUD") else nil
+	local modal = if hud then hud:FindFirstChild("LevelUpModal") :: Frame? else nil
+	if modal and modal.Visible then
+		return true
+	end
+	return false
+end
+
 -- 6. Movement & Camera Update Loop
 local function onRenderStep(dt: number)
 	local char = player.Character
@@ -177,6 +190,14 @@ local function onRenderStep(dt: number)
 	local targetCamPos = pPos + CAMERA_OFFSET
 	local lookTarget = pPos + Vector3.new(0, 1.5, 0)
 	camera.CFrame = CFrame.lookAt(targetCamPos, lookTarget)
+
+	-- Immobilisation complète pendant le choix d'amélioration (Level-Up)
+	if isPlayerFrozenInLevelUp() then
+		touchMoveDir = Vector3.zero
+		humanoid:Move(Vector3.zero, false)
+		updateTargetReticle(nil)
+		return
+	end
 
 	-- Direct Keyboard Movement (WASD + ZQSD + Arrows)
 	local moveX = 0
@@ -276,7 +297,7 @@ RunService.RenderStepped:Connect(onRenderStep)
 
 -- 8. Overdrive Activation (Space, F, or Touch Button)
 local function handleOverdriveAction(actionName: string, inputState: Enum.UserInputState, inputObj: InputObject)
-	if inputState == Enum.UserInputState.Begin then
+	if inputState == Enum.UserInputState.Begin and not isPlayerFrozenInLevelUp() then
 		Remotes.GetEvent("TriggerOverdrive"):FireServer()
 	end
 	return Enum.ContextActionResult.Pass

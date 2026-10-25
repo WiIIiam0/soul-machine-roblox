@@ -329,7 +329,7 @@ end
 RunService.Heartbeat:Connect(function(dt: number)
 	for player, state in pairs(playerWeaponsMap) do
 		local pData = PlayerStatsManager.GetPlayerData(player)
-		if not pData or pData.isDead then continue end
+		if not pData or pData.isDead or pData.isLevelUpPhase then continue end
 
 		local char = player.Character
 		if not char or not char:FindFirstChild("HumanoidRootPart") then continue end

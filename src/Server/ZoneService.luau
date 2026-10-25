@@ -267,7 +267,7 @@ RunService.Heartbeat:Connect(function(_dt: number)
 		if (spawnGraceUntil[player] or 0) > now then continue end
 
 		local pData = PlayerStatsManager.GetPlayerData(player)
-		if not pData or pData.isDead then continue end
+		if not pData or pData.isDead or pData.isLevelUpPhase then continue end
 
 		local char = player.Character
 		if not char then continue end

@@ -223,11 +223,11 @@ RunService.Heartbeat:Connect(function(dt: number)
 		-- Gentle rotation visual
 		gem.part.CFrame = gem.part.CFrame * CFrame.Angles(0, math.rad(90 * dt), 0)
 
-		-- Find closest player or track magnetized player
+		-- Find closest player or track magnetized player (ignore dead or frozen Level-Up players)
 		if not gem.magnetizedTo or not gem.magnetizedTo.Parent then
 			for _, player in ipairs(Players:GetPlayers()) do
 				local pData = PlayerStatsManager.GetPlayerData(player)
-				if pData and not pData.isDead then
+				if pData and not pData.isDead and not pData.isLevelUpPhase then
 					local char = player.Character
 					if char and char:FindFirstChild("HumanoidRootPart") then
 						local pPos = (char:FindFirstChild("HumanoidRootPart") :: BasePart).Position

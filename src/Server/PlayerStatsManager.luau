@@ -64,6 +64,7 @@ function PlayerStatsManager.InitPlayer(player: Player): PlayerData
 	}
 
 	playerDataMap[player] = data
+	player:SetAttribute("IsLevelUpFrozen", false)
 	PlayerStatsManager.RecalculateStats(player)
 	return data
 end
@@ -101,12 +102,12 @@ function PlayerStatsManager.RecalculateStats(player: Player)
 	data.currentStats.BurnDamage = math.max(1, base.BurnDamage + (bonus.BurnDamage or 0))
 	data.currentStats.RangeMultiplier = math.max(0.5, base.RangeMultiplier + (bonus.RangeMultiplier or 0))
 
-	-- Update Roblox character humanoid walk speed
+	-- Update Roblox character humanoid walk speed (reste à 0 si le joueur est figé en choix de Level-Up)
 	local character = player.Character
 	if character then
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
-			humanoid.WalkSpeed = data.currentStats.Speed
+			humanoid.WalkSpeed = if data.isLevelUpPhase then 0 else data.currentStats.Speed
 		end
 	end
 
@@ -179,6 +180,31 @@ function PlayerStatsManager.SetLevelUpPhase(player: Player, active: boolean)
 	local data = playerDataMap[player]
 	if not data then return end
 	data.isLevelUpPhase = active
+	player:SetAttribute("IsLevelUpFrozen", active)
+
+	local char = player.Character
+	if char then
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			if humanoid:GetAttribute("OrigJumpHeight") == nil then
+				humanoid:SetAttribute("OrigJumpHeight", humanoid.JumpHeight)
+				humanoid:SetAttribute("OrigJumpPower", humanoid.JumpPower)
+			end
+			humanoid.WalkSpeed = if active then 0 else data.currentStats.Speed
+			humanoid.JumpHeight = if active then 0 else (tonumber(humanoid:GetAttribute("OrigJumpHeight")) or 7.2)
+			humanoid.JumpPower = if active then 0 else (tonumber(humanoid:GetAttribute("OrigJumpPower")) or 50)
+			if active then
+				humanoid:Move(Vector3.zero, false)
+			end
+		end
+		if active then
+			local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if hrp then
+				hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			end
+		end
+	end
+
 	PlayerStatsManager.RefreshPhaseVisuals(player)
 end
 
@@ -264,7 +290,7 @@ end
 
 function PlayerStatsManager.TryActivateOverdrive(player: Player): boolean
 	local data = playerDataMap[player]
-	if not data or data.isDead or data.isOverdriveActive then return false end
+	if not data or data.isDead or data.isLevelUpPhase or data.isOverdriveActive then return false end
 	if data.currentOverdrive < data.maxOverdrive then return false end
 
 	data.isOverdriveActive = true
@@ -385,6 +411,7 @@ function PlayerStatsManager.ImportState(player: Player, saved: any)
 	data.currentOverdrive = math.clamp(tonumber(saved.currentOverdrive) or 0, 0, data.maxOverdrive)
 	data.isDead = false
 	data.isLevelUpPhase = false
+	player:SetAttribute("IsLevelUpFrozen", false)
 
 	PlayerStatsManager.RecalculateStats(player)
 

@@ -250,6 +250,13 @@ end)
 -- Track physical mecha movement and immobility to feed OnMove and OnStandStill passives
 RunService.Heartbeat:Connect(function(dt: number)
 	for player, _ in pairs(playerPassiveStates) do
+		local pData = PlayerStatsManager.GetPlayerData(player)
+		if not pData or pData.isDead or pData.isLevelUpPhase then
+			playerLastPositions[player] = nil
+			playerStandTimers[player] = 0
+			continue
+		end
+
 		local char = player.Character
 		if char then
 			local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?

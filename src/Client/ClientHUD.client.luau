@@ -879,13 +879,13 @@ local function applyResponsiveLayout()
 		-- Top-Center In-Run Bar
 		topBarContainer.AnchorPoint = Vector2.new(0.5, 0)
 		topBarContainer.Position = UDim2.new(0.5, 0, 0, 14)
-		topBarContainer.Size = UDim2.new(0, 480, 0, 44)
+		topBarContainer.Size = UDim2.new(0, 560, 0, 44)
 		levelBadge.Size = UDim2.new(0, 75, 1, 0)
 		levelBadge.TextSize = 13
 		xpBarBg.Position = UDim2.new(0, 80, 0.5, -7)
-		xpBarBg.Size = UDim2.new(1, -250, 0, 14)
-		waveInfoLabel.Size = UDim2.new(0, 165, 1, 0)
-		waveInfoLabel.Position = UDim2.new(1, -170, 0, 0)
+		xpBarBg.Size = UDim2.new(1, -315, 0, 14)
+		waveInfoLabel.Size = UDim2.new(0, 225, 1, 0)
+		waveInfoLabel.Position = UDim2.new(1, -230, 0, 0)
 		waveInfoLabel.TextSize = 11
 
 		-- Meta Progression Bar
