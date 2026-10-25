@@ -132,7 +132,7 @@ local function triggerRocketRadialBurst(player: Player, burstPos: Vector3, rank:
 			EnemyService.TakeDamage(v, shrapnelDmg, false, player)
 		end
 
-		Remotes.GetEvent("VFXEvent"):FireAllClients("LaserTracer", burstPos, rEnd, Color3.fromRGB(255, 120, 30), 0.20)
+		Remotes.GetEvent("VFXEvent"):FireAllClients("LaserTracer", burstPos, rEnd, Color3.fromRGB(255, 120, 30), 0.20, "RocketShrapnel")
 	end
 end
 
@@ -197,7 +197,7 @@ local function executeInstantShot(
 	end
 
 	-- Broadcast instant laser visual tracer to clients
-	Remotes.GetEvent("VFXEvent"):FireAllClients("LaserTracer", originPos, finalPoint, rank.color, 0.35)
+	Remotes.GetEvent("VFXEvent"):FireAllClients("LaserTracer", originPos, finalPoint, rank.color, 0.35, weaponDef.id)
 end
 
 local function fireShotPattern(player: Player, weaponDef: WeaponsData.WeaponDefinition, rank: WeaponsData.WeaponRank, originPos: Vector3, aimDir: Vector3)

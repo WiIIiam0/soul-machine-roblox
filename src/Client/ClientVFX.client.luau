@@ -9,6 +9,9 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
+local VFXFolder = script.Parent:WaitForChild("VFX")
+local ProceduralLightning = require(VFXFolder:WaitForChild("ProceduralLightning"))
+
 local vfxEvent = Remotes.GetEvent("VFXEvent")
 
 local function createExplosion(pos: Vector3, radius: number, color: Color3)
@@ -204,12 +207,12 @@ vfxEvent.OnClientEvent:Connect(function(eventType: string, ...: any)
 	elseif eventType == "BurnTransfer" then
 		local startPos, endPos = ...
 		if startPos and endPos then
-			createBurnTransferBeam(startPos, endPos)
+			ProceduralLightning.CreateBurnArc(startPos, endPos)
 		end
 	elseif eventType == "LaserTracer" then
-		local startPos, endPos, color, width = ...
+		local startPos, endPos, color, width, weaponId = ...
 		if startPos and endPos then
-			createLaserTracer(startPos, endPos, color or Color3.fromRGB(0, 220, 255), width)
+			ProceduralLightning.CreateBolt(startPos, endPos, weaponId, color, width)
 		end
 	elseif eventType == "OverdriveStart" then
 		local targetPlayer = ...
