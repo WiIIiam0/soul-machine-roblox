@@ -1,5 +1,5 @@
 --!strict
--- PlayerMechaVisuals.luau: Modular 3D Mecha transformation with independent Torso (aim) and Legs (walk cycle) joints
+-- PlayerMechaVisuals.luau: Modular 3D Mecha transformation with independent Torso (aim), Chassis & Legs joints
 -- Fully supports dual-axis rotation and procedural mechanical walk animation.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -70,22 +70,35 @@ end
 
 local function isUpperBodyPart(part: BasePart, modelCenterY: number): boolean
 	local name = string.lower(part.Name)
-	if string.find(name, "spine") or string.find(name, "chest") or string.find(name, "torso")
-		or string.find(name, "head") or string.find(name, "neck") or string.find(name, "arm")
-		or string.find(name, "shoulder") or string.find(name, "hand") or string.find(name, "gun")
-		or string.find(name, "weapon") or string.find(name, "cockpit") or string.find(name, "backpack")
-		or string.find(name, "buste") then
-		return true
-	end
+	-- 1. Explicit lower body / locomotion keywords
 	if string.find(name, "leg") or string.find(name, "foot") or string.find(name, "feet")
 		or string.find(name, "pelvis") or string.find(name, "hip") or string.find(name, "thigh")
+		or string.find(name, "shin") or string.find(name, "toe") or string.find(name, "heel")
 		or string.find(name, "wheel") or string.find(name, "track") or string.find(name, "tread") then
 		return false
 	end
+
+	-- 2. Explicit upper body / torso keywords (includes body, chest, arms, shoulders, guns, cockpit, head)
+	if string.find(name, "body") or string.find(name, "chest") or string.find(name, "torso")
+		or string.find(name, "head") or string.find(name, "neck") or string.find(name, "arm")
+		or string.find(name, "shoulder") or string.find(name, "hand") or string.find(name, "gun")
+		or string.find(name, "weapon") or string.find(name, "cockpit") or string.find(name, "backpack")
+		or string.find(name, "buste") or string.find(name, "spine") or string.find(name, "mount")
+		or string.find(name, "eye") or string.find(name, "visor") then
+		return true
+	end
+
+	-- 3. Fallback based on height relative to model center
 	return part.Position.Y >= modelCenterY
 end
 
 local function applySciFiMechaMaterials(part: BasePart)
+	-- Preserve original textures or decals if present
+	if (part:IsA("MeshPart") and part.TextureID ~= "") or part:FindFirstChildOfClass("SurfaceAppearance") or part:FindFirstChildOfClass("Decal") then
+		part.Color = Color3.new(1, 1, 1)
+		return
+	end
+
 	local name = string.lower(part.Name)
 	if string.find(name, "eye") or string.find(name, "visor") or string.find(name, "glow")
 		or string.find(name, "light") or string.find(name, "core") or string.find(name, "glass") then
@@ -94,14 +107,14 @@ local function applySciFiMechaMaterials(part: BasePart)
 	elseif string.find(name, "joint") or string.find(name, "spine") or string.find(name, "frame")
 		or string.find(name, "hydraulic") or string.find(name, "piston") then
 		part.Material = Enum.Material.DiamondPlate
-		part.Color = Color3.fromRGB(28, 32, 42)
-	elseif string.find(name, "accent") or string.find(name, "stripe") or string.find(name, "shoulder") then
-		part.Material = Enum.Material.Metal
-		part.Color = Color3.fromRGB(25, 125, 245)
+		part.Color = Color3.fromRGB(28, 32, 40)
+	elseif string.find(name, "outline") then
+		part.Material = Enum.Material.SmoothPlastic
+		part.Color = Color3.fromRGB(15, 18, 24)
 	else
-		-- High-grade gunmetal battle plating
+		-- High-grade military gunmetal composite (unified and textured appearance)
 		part.Material = Enum.Material.Metal
-		part.Color = Color3.fromRGB(52, 58, 70)
+		part.Color = Color3.fromRGB(56, 62, 74)
 	end
 end
 
@@ -165,10 +178,10 @@ function PlayerMechaVisuals.Apply(character: Model)
 	end
 
 	-- Make default Roblox character body parts invisible
-	for _, desc in ipairs(character:GetDescendants()) do
-		if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" then
+	local function hideDefaultPart(desc: Instance)
+		if desc:IsA("BasePart") and desc.Name ~= "HumanoidRootPart" and not desc:IsDescendantOf(clone) then
 			desc.Transparency = 1
-		elseif desc:IsA("Decal") then
+		elseif desc:IsA("Decal") and not desc:IsDescendantOf(clone) then
 			desc.Transparency = 1
 		elseif desc:IsA("Accessory") then
 			local handle = desc:FindFirstChild("Handle")
@@ -178,14 +191,20 @@ function PlayerMechaVisuals.Apply(character: Model)
 		end
 	end
 
+	for _, desc in ipairs(character:GetDescendants()) do
+		hideDefaultPart(desc)
+	end
+	character.DescendantAdded:Connect(hideDefaultPart)
+
 	-- Position mecha slightly offset so feet align flush with ground
 	clone:PivotTo(hrp.CFrame * CFrame.new(0, -0.6, 0))
 
 	local modelCf, modelSize = clone:GetBoundingBox()
-	local modelCenterY = modelCf.Position.Y - (modelSize.Y * 0.1)
+	local modelCenterY = modelCf.Position.Y - (modelSize.Y * 0.15)
 
-	-- 1. Create independent Torso & Leg Anchors
-	local torsoAnchor = createJointAnchor("MechaTorsoAnchor", hrp.CFrame * CFrame.new(0, 0.5, 0), clone)
+	-- 1. Create articulated Anchors for Torso, Chassis & Individual Legs
+	local chassisAnchor = createJointAnchor("MechaChassisAnchor", hrp.CFrame * CFrame.new(0, -0.2, 0), clone)
+	local torsoAnchor = createJointAnchor("MechaTorsoAnchor", hrp.CFrame * CFrame.new(0, 0.4, 0), clone)
 	local leftLegAnchor = createJointAnchor("MechaLeftLegAnchor", hrp.CFrame * CFrame.new(-0.8, -0.2, 0), clone)
 	local rightLegAnchor = createJointAnchor("MechaRightLegAnchor", hrp.CFrame * CFrame.new(0.8, -0.2, 0), clone)
 
@@ -204,7 +223,8 @@ function PlayerMechaVisuals.Apply(character: Model)
 		return m
 	end
 
-	createOrResetMotor6D("MechaWaistJoint", hrp, torsoAnchor, CFrame.new(0, 0.5, 0))
+	createOrResetMotor6D("MechaChassisJoint", hrp, chassisAnchor, CFrame.new(0, -0.2, 0))
+	createOrResetMotor6D("MechaWaistJoint", hrp, torsoAnchor, CFrame.new(0, 0.4, 0))
 	createOrResetMotor6D("MechaLeftHip", hrp, leftLegAnchor, CFrame.new(-0.8, -0.2, 0))
 	createOrResetMotor6D("MechaRightHip", hrp, rightLegAnchor, CFrame.new(0.8, -0.2, 0))
 
@@ -212,38 +232,39 @@ function PlayerMechaVisuals.Apply(character: Model)
 	local upperCount = 0
 	local leftCount = 0
 	local rightCount = 0
-	local pelvisCount = 0
+	local chassisCount = 0
 
 	for _, p in ipairs(clone:GetDescendants()) do
-		if p:IsA("BasePart") and p ~= torsoAnchor and p ~= leftLegAnchor and p ~= rightLegAnchor then
+		if p:IsA("BasePart") and p ~= torsoAnchor and p ~= chassisAnchor and p ~= leftLegAnchor and p ~= rightLegAnchor then
 			local name = string.lower(p.Name)
 			if isUpperBodyPart(p, modelCenterY) then
+				-- Upper body (Cockpit, Torso, Head, Shoulders, Arms, Hands, Weapons)
 				local w = Instance.new("WeldConstraint")
 				w.Part0 = torsoAnchor
 				w.Part1 = p
 				w.Parent = p
 				upperCount += 1
 			else
-				-- Lower body: determine Left Leg vs Right Leg vs Pelvis
-				if string.find(name, "left") or string.find(name, "_l_") or string.find(name, "_l") or (p.Position.X < (modelCf.Position.X - 0.25)) then
+				-- Lower body: determine Left Leg vs Right Leg vs Central Chassis
+				if string.find(name, "left") or string.find(name, "_l_") or string.find(name, "_l") or (p.Position.X < (modelCf.Position.X - 0.35)) then
 					local w = Instance.new("WeldConstraint")
 					w.Part0 = leftLegAnchor
 					w.Part1 = p
 					w.Parent = p
 					leftCount += 1
-				elseif string.find(name, "right") or string.find(name, "_r_") or string.find(name, "_r") or (p.Position.X > (modelCf.Position.X + 0.25)) then
+				elseif string.find(name, "right") or string.find(name, "_r_") or string.find(name, "_r") or (p.Position.X > (modelCf.Position.X + 0.35)) then
 					local w = Instance.new("WeldConstraint")
 					w.Part0 = rightLegAnchor
 					w.Part1 = p
 					w.Parent = p
 					rightCount += 1
 				else
-					-- Central hips / pelvis
+					-- Central chassis / pelvis / consolidated legs (like Mech_Humanoid_Legs_Geom)
 					local w = Instance.new("WeldConstraint")
-					w.Part0 = hrp
+					w.Part0 = chassisAnchor
 					w.Part1 = p
 					w.Parent = p
-					pelvisCount += 1
+					chassisCount += 1
 				end
 			end
 		end
@@ -252,8 +273,8 @@ function PlayerMechaVisuals.Apply(character: Model)
 	clone.Name = "MechaAvatar"
 	clone.Parent = character
 
-	print(string.format("[PlayerMechaVisuals] Articulated Mecha '%s' mounted (Torso: %d, LeftLeg: %d, RightLeg: %d, Pelvis: %d)",
-		template.Name, upperCount, leftCount, rightCount, pelvisCount))
+	print(string.format("[PlayerMechaVisuals] Articulated Mecha '%s' mounted (Torso: %d, Chassis: %d, LeftLeg: %d, RightLeg: %d)",
+		template.Name, upperCount, chassisCount, leftCount, rightCount))
 end
 
 return PlayerMechaVisuals

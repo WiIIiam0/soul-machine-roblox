@@ -44,7 +44,7 @@ local topInfoContainer = Instance.new("Frame")
 topInfoContainer.Name = "TopInfoContainer"
 topInfoContainer.Size = UDim2.new(0, 130, 0, 26)
 topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
-topInfoContainer.Position = UDim2.new(0.5, 0, 0, 48)
+topInfoContainer.Position = UDim2.new(0.5, 0, 0, 0)
 topInfoContainer.BackgroundColor3 = Color3.fromRGB(10, 14, 22)
 topInfoContainer.BackgroundTransparency = 0.45
 topInfoContainer.BorderSizePixel = 0
@@ -190,15 +190,15 @@ local function applyResponsiveLayout()
 	local safeLimit = CORE_BUTTONS_RIGHT + 12
 
 	if badgeLeftEdge >= safeLimit then
-		-- No collision: perfectly centered horizontally across screen
+		-- No collision: perfectly centered horizontally across screen, flush at the very top edge
 		topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
-		topInfoContainer.Position = UDim2.new(0.5, 0, 0, topInset + 8)
+		topInfoContainer.Position = UDim2.new(0.5, 0, 0, 0)
 	else
-		-- Collision detected on narrow screens: center dynamically between the core buttons and right edge of screen
+		-- Collision detected on narrow screens: center dynamically between the core buttons and right edge of screen, flush at top
 		local availableSpace = screenWidth - CORE_BUTTONS_RIGHT
 		local shiftedCenterX = CORE_BUTTONS_RIGHT + (availableSpace * 0.5)
 		topInfoContainer.AnchorPoint = Vector2.new(0.5, 0)
-		topInfoContainer.Position = UDim2.new(0, math.floor(shiftedCenterX), 0, topInset + 8)
+		topInfoContainer.Position = UDim2.new(0, math.floor(shiftedCenterX), 0, 0)
 	end
 
 	topInfoScale.Scale = badgeScale
