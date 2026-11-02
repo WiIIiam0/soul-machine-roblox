@@ -73,8 +73,7 @@ local function setupPlayer(player: Player)
 			-- Spawn léger décalage aléatoire autour du centre pour la coop multi-joueurs
 			hrp.CFrame = CFrame.new(math.random(-6, 6), 4, math.random(-6, 6))
 
-			-- Transform avatar into custom 3D Mecha from ReplicatedStorage.Mech
-			PlayerMechaVisuals.Apply(character)
+			-- Avatar joueur Roblox standard (préservation intégrale du skin et des animations natives)
 
 			-- 3 secondes d'immunité + non-aggro à l'arrivée dans la zone (déplacement libre)
 			PlayerStatsManager.GrantSpawnProtection(player, 3.0)

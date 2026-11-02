@@ -13,6 +13,7 @@ local GameEvents = require(Shared:WaitForChild("GameEvents"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
+local HumanoidEnemyBuilder = require(script.Parent.HumanoidEnemyBuilder)
 
 export type DashState = "NONE" | "PREP" | "CHARGING"
 
@@ -56,6 +57,19 @@ export type ActiveEnemy = {
 
 	-- Visual Telegraph (Laser beam / ground strip)
 	telegraphPart: BasePart?,
+
+	-- Procedural Humanoid Limb Walk Cycle
+	leftHip: Motor6D?,
+	rightHip: Motor6D?,
+	leftShoulder: Motor6D?,
+	rightShoulder: Motor6D?,
+	defaultLeftHipC0: CFrame?,
+	defaultRightHipC0: CFrame?,
+	defaultLeftShoulderC0: CFrame?,
+	defaultRightShoulderC0: CFrame?,
+	holdsWeaponRight: boolean?,
+	holdsWeaponLeft: boolean?,
+	walkCycle: number?,
 }
 
 local EnemyService = {}
@@ -142,24 +156,22 @@ local function findCustomTemplate(enemyId: string): Model?
 end
 
 local function getEnemyFixedY(enemyId: string, sizeY: number): number
-	if enemyId == "ScoutDrone" or enemyId == "MetaDrone" then
-		return 3.0 + (sizeY * 0.5)
-	end
-	return sizeY * 0.5 + 0.05
+	return HumanoidEnemyBuilder.GetFixedY(enemyId)
 end
 
-local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: boolean): BillboardGui
+local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: boolean, roleBadge: string?): BillboardGui
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "HealthUI"
 	billboard.Adornee = adornee
-	billboard.Size = if isBoss then UDim2.new(0, 110, 0, 10) else UDim2.new(0, 70, 0, 8)
+	billboard.Size = if isBoss then UDim2.new(0, 115, 0, 14) else UDim2.new(0, 75, 0, 10)
 	billboard.StudsOffset = Vector3.new(0, heightOffset + 1.2, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Parent = adornee
 
 	local bg = Instance.new("Frame")
 	bg.Name = "BG"
-	bg.Size = UDim2.new(1, 0, 1, 0)
+	bg.Size = UDim2.new(1, -16, 1, 0)
+	bg.Position = UDim2.new(0, 16, 0, 0)
 	bg.BackgroundColor3 = Color3.fromRGB(15, 18, 24)
 	bg.BorderSizePixel = 0
 	bg.Parent = billboard
@@ -178,6 +190,18 @@ local function createHealthUI(adornee: BasePart, heightOffset: number, isBoss: b
 	local barCorner = Instance.new("UICorner")
 	barCorner.CornerRadius = UDim.new(0.5, 0)
 	barCorner.Parent = bar
+
+	if roleBadge and roleBadge ~= "" then
+		local badgeLabel = Instance.new("TextLabel")
+		badgeLabel.Name = "RoleBadge"
+		badgeLabel.Size = UDim2.new(0, 14, 0, 14)
+		badgeLabel.Position = UDim2.new(0, -16, 0.5, 0)
+		badgeLabel.AnchorPoint = Vector2.new(0, 0.5)
+		badgeLabel.BackgroundTransparency = 1
+		badgeLabel.Text = roleBadge
+		badgeLabel.TextSize = 11
+		badgeLabel.Parent = bg
+	end
 
 	return billboard
 end
@@ -494,7 +518,14 @@ function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3, overr
 	local config = EnemiesData.GetEnemy(configId)
 	if not config then return nil end
 
-	local model, rootPart, centeredSpawn = createEnemyModel(config, spawnPosition)
+	local built = HumanoidEnemyBuilder.Build(config, spawnPosition)
+	local model = built.model
+	local rootPart = built.rootPart
+	local centeredSpawn = Vector3.new(spawnPosition.X, built.fixedY, spawnPosition.Z)
+
+	local roleBadge = HumanoidEnemyBuilder.GetRoleBadge(config.id)
+	createHealthUI(rootPart, config.size.Y * 0.45, config.isBoss, roleBadge)
+	model.Parent = getEnemiesFolder()
 
 	local hpMult = if overrides and overrides.hpMult then overrides.hpMult else 1.0
 	local dmgMult = if overrides and overrides.damageMult then overrides.damageMult else 1.0
@@ -536,6 +567,18 @@ function EnemyService.SpawnEnemy(configId: string, spawnPosition: Vector3, overr
 		shootChargeTimer = 0,
 
 		telegraphPart = nil,
+
+		leftHip = built.leftHip,
+		rightHip = built.rightHip,
+		leftShoulder = built.leftShoulder,
+		rightShoulder = built.rightShoulder,
+		defaultLeftHipC0 = built.defaultLeftHipC0,
+		defaultRightHipC0 = built.defaultRightHipC0,
+		defaultLeftShoulderC0 = built.defaultLeftShoulderC0,
+		defaultRightShoulderC0 = built.defaultRightShoulderC0,
+		holdsWeaponRight = built.holdsWeaponRight,
+		holdsWeaponLeft = built.holdsWeaponLeft,
+		walkCycle = math.random() * math.pi * 2,
 	}
 
 	activeEnemies[model] = enemy
@@ -1034,8 +1077,30 @@ RunService.Heartbeat:Connect(function(dt: number)
 			end
 		end
 
+		-- Procedural humanoid walk stride animation
+		if enemy.leftHip and enemy.rightHip and enemy.defaultLeftHipC0 and enemy.defaultRightHipC0 then
+			local isMoving = (enemy.dashState == "CHARGING") or (moveDir.Magnitude > 0.05)
+			if isMoving then
+				enemy.walkCycle = (enemy.walkCycle or 0) + dt * (cfg.moveSpeed * 0.95)
+				local stride = math.sin(enemy.walkCycle or 0) * math.rad(28)
+
+				enemy.leftHip.C0 = enemy.defaultLeftHipC0 * CFrame.Angles(stride, 0, 0)
+				enemy.rightHip.C0 = enemy.defaultRightHipC0 * CFrame.Angles(-stride, 0, 0)
+
+				if enemy.leftShoulder and enemy.defaultLeftShoulderC0 and not enemy.holdsWeaponLeft then
+					enemy.leftShoulder.C0 = enemy.defaultLeftShoulderC0 * CFrame.Angles(-stride * 0.8, 0, 0)
+				end
+				if enemy.rightShoulder and enemy.defaultRightShoulderC0 and not enemy.holdsWeaponRight then
+					enemy.rightShoulder.C0 = enemy.defaultRightShoulderC0 * CFrame.Angles(stride * 0.8, 0, 0)
+				end
+			else
+				enemy.leftHip.C0 = enemy.leftHip.C0:Lerp(enemy.defaultLeftHipC0, math.clamp(dt * 12, 0, 1))
+				enemy.rightHip.C0 = enemy.rightHip.C0:Lerp(enemy.defaultRightHipC0, math.clamp(dt * 12, 0, 1))
+			end
+		end
+
 		-- Enforce fixed Y plane (guarantees model never bobs into or above ground)
-		local fixedY = getEnemyFixedY(cfg.id, cfg.size.Y)
+		local fixedY = HumanoidEnemyBuilder.GetFixedY(cfg.id)
 		enemy.currentPos = Vector3.new(enemy.currentPos.X, fixedY, enemy.currentPos.Z)
 
 		-- Facing direction strictly aligns with attack telegraph or motion

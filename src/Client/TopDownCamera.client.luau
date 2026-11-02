@@ -136,6 +136,7 @@ local function setupCharacter(character: Model)
 	if not hrp or not humanoid then return end
 
 	humanoid.AutoRotate = false
+	origWaistC0 = nil
 
 	local rootAttachment = hrp:FindFirstChild("RootAttachment") :: Attachment?
 	if not rootAttachment then
@@ -163,11 +164,7 @@ player.CharacterAdded:Connect(setupCharacter)
 local lastAimDir: Vector3? = nil
 local lastMoveFacingDir: Vector3? = nil
 local currentTorsoYaw = 0
-local walkCycle = 0
-local BASE_LEFT_HIP_C0 = CFrame.new(-0.8, -0.2, 0)
-local BASE_RIGHT_HIP_C0 = CFrame.new(0.8, -0.2, 0)
-local BASE_TORSO_C0 = CFrame.new(0, 0.4, 0)
-local BASE_CHASSIS_C0 = CFrame.new(0, -0.2, 0)
+local origWaistC0: CFrame? = nil
 
 local function isPlayerFrozenInLevelUp(): boolean
 	if player:GetAttribute("IsLevelUpFrozen") == true then
@@ -296,14 +293,20 @@ local function onRenderStep(dt: number)
 			alignRot.CFrame = CFrame.lookAt(Vector3.zero, lastMoveFacingDir)
 		end
 
-		-- 2. Articulated Mecha Locomotion & Dual-Axis Upper Body Orientation
-		local waistJoint = hrp:FindFirstChild("MechaWaistJoint") :: Motor6D?
-		local chassisJoint = hrp:FindFirstChild("MechaChassisJoint") :: Motor6D?
-		local leftHip = hrp:FindFirstChild("MechaLeftHip") :: Motor6D?
-		local rightHip = hrp:FindFirstChild("MechaRightHip") :: Motor6D?
+		-- 2. Native R15 Waist Dual-Axis Aiming (UpperTorso swivels towards target)
+		local upperTorso = char:FindFirstChild("UpperTorso") :: BasePart?
+		local waistJoint = if upperTorso then upperTorso:FindFirstChild("Waist") :: Motor6D? else nil
+		if not waistJoint then
+			-- Fallback check on HRP / Torso (R6 or custom rig)
+			local torso = char:FindFirstChild("Torso") :: BasePart?
+			waistJoint = if torso then torso:FindFirstChild("RootJoint") :: Motor6D? else (hrp:FindFirstChild("Waist") :: Motor6D?)
+		end
 
-		-- Upper Body / Torso (Buste) Target Angle
 		if waistJoint then
+			if not origWaistC0 then
+				origWaistC0 = waistJoint.C0
+			end
+
 			if aimDir then
 				local localAim = hrp.CFrame:VectorToObjectSpace(aimDir)
 				local targetYaw = math.atan2(-localAim.X, -localAim.Z)
@@ -318,45 +321,8 @@ local function onRenderStep(dt: number)
 				while diff < -math.pi do diff += math.pi * 2 end
 				currentTorsoYaw = currentTorsoYaw + diff * math.clamp(dt * 12, 0, 1)
 			end
-		end
 
-		-- Procedural Mechanical Leg Strides & Stride Bobbing
-		local isMoving = moveDir.Magnitude > 0.05
-		if isMoving then
-			local spd = humanoid.WalkSpeed
-			walkCycle += dt * (spd * 0.95)
-			local strideAngle = math.sin(walkCycle) * math.rad(28)
-			local bobOffset = math.abs(math.sin(walkCycle)) * 0.22
-			local rollAngle = math.sin(walkCycle) * math.rad(2.2)
-			local pitchTilt = math.rad(-3.0) -- Dynamic forward lean into momentum
-
-			if chassisJoint then
-				chassisJoint.C0 = BASE_CHASSIS_C0 * CFrame.new(0, bobOffset, 0) * CFrame.Angles(pitchTilt, 0, rollAngle)
-			end
-			if leftHip then
-				leftHip.C0 = BASE_LEFT_HIP_C0 * CFrame.Angles(strideAngle, 0, 0)
-			end
-			if rightHip then
-				rightHip.C0 = BASE_RIGHT_HIP_C0 * CFrame.Angles(-strideAngle, 0, 0)
-			end
-			if waistJoint then
-				waistJoint.C0 = BASE_TORSO_C0 * CFrame.new(0, bobOffset * 0.4, 0) * CFrame.Angles(0, currentTorsoYaw, rollAngle * 0.4)
-			end
-		else
-			-- Return smoothly to neutral stance
-			walkCycle = 0
-			if chassisJoint then
-				chassisJoint.C0 = chassisJoint.C0:Lerp(BASE_CHASSIS_C0, math.clamp(dt * 14, 0, 1))
-			end
-			if leftHip then
-				leftHip.C0 = leftHip.C0:Lerp(BASE_LEFT_HIP_C0, math.clamp(dt * 14, 0, 1))
-			end
-			if rightHip then
-				rightHip.C0 = rightHip.C0:Lerp(BASE_RIGHT_HIP_C0, math.clamp(dt * 14, 0, 1))
-			end
-			if waistJoint then
-				waistJoint.C0 = waistJoint.C0:Lerp(BASE_TORSO_C0 * CFrame.Angles(0, currentTorsoYaw, 0), math.clamp(dt * 14, 0, 1))
-			end
+			waistJoint.C0 = origWaistC0 * CFrame.Angles(0, currentTorsoYaw, 0)
 		end
 	end
 end
