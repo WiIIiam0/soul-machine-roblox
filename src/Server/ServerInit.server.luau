@@ -71,32 +71,34 @@ local function setupPlayer(player: Player)
 
 		local gunBody = Instance.new("Part")
 		gunBody.Name = "GunBody"
-		gunBody.Size = Vector3.new(0.4, 0.65, 2.0)
+		gunBody.Size = Vector3.new(0.35, 0.55, 1.8)
 		gunBody.Material = Enum.Material.Metal
 		gunBody.Color = Color3.fromRGB(25, 28, 35)
 		gunBody.CanCollide = false
 		gunBody.Massless = true
-		gunBody.CFrame = rightHand.CFrame * CFrame.new(0, -0.4, -0.7)
 		gunBody.Parent = blasterModel
 
 		local gunBarrel = Instance.new("Part")
 		gunBarrel.Name = "GunBarrel"
-		gunBarrel.Size = Vector3.new(0.24, 0.24, 1.2)
+		gunBarrel.Size = Vector3.new(0.2, 0.2, 1.0)
 		gunBarrel.Material = Enum.Material.Neon
 		gunBarrel.Color = Color3.fromRGB(0, 220, 255)
 		gunBarrel.CanCollide = false
 		gunBarrel.Massless = true
-		gunBarrel.CFrame = gunBody.CFrame * CFrame.new(0, 0.12, -1.1)
 		gunBarrel.Parent = blasterModel
 
-		local w1 = Instance.new("WeldConstraint")
+		local w1 = Instance.new("Weld")
+		w1.Name = "HandWeld"
 		w1.Part0 = rightHand
 		w1.Part1 = gunBody
+		w1.C0 = CFrame.new(0, -0.25, -0.6)
 		w1.Parent = gunBody
 
-		local w2 = Instance.new("WeldConstraint")
+		local w2 = Instance.new("Weld")
+		w2.Name = "BarrelWeld"
 		w2.Part0 = gunBody
 		w2.Part1 = gunBarrel
+		w2.C0 = CFrame.new(0, 0.1, -0.9)
 		w2.Parent = gunBarrel
 
 		blasterModel.Parent = character

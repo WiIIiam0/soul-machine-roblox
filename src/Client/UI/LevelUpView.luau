@@ -195,7 +195,7 @@ function LevelUpView.Create(parentGui: ScreenGui, onSelectChoice: (index: number
 				diag.ZIndex = 2
 				diag.Parent = iconBox
 
-				local tRes = TextureResolver.Resolve(cardData.triggerIconFile, nil)
+				local tRes = TextureResolver.Resolve(cardData.triggerIconFile, cardData.triggerIcon)
 				local trigColor = cardData.triggerColor or Color3.new(1, 1, 1)
 				if tRes and tRes ~= "" then
 					local tImg = Instance.new("ImageLabel")
@@ -221,7 +221,7 @@ function LevelUpView.Create(parentGui: ScreenGui, onSelectChoice: (index: number
 					tLbl.Parent = iconBox
 				end
 
-				local eRes = TextureResolver.Resolve(cardData.effectIconFile, nil)
+				local eRes = TextureResolver.Resolve(cardData.effectIconFile, cardData.effectIcon)
 				local effColor = cardData.effectColor or Color3.new(1, 1, 1)
 				if eRes and eRes ~= "" then
 					local eImg = Instance.new("ImageLabel")
@@ -404,7 +404,7 @@ function LevelUpView.Create(parentGui: ScreenGui, onSelectChoice: (index: number
 				diag.ZIndex = 2
 				diag.Parent = iconBox
 
-				local tRes = TextureResolver.Resolve(cardData.triggerIconFile, nil)
+				local tRes = TextureResolver.Resolve(cardData.triggerIconFile, cardData.triggerIcon)
 				local trigColor = cardData.triggerColor or Color3.new(1, 1, 1)
 				if tRes and tRes ~= "" then
 					local tImg = Instance.new("ImageLabel")
@@ -430,7 +430,7 @@ function LevelUpView.Create(parentGui: ScreenGui, onSelectChoice: (index: number
 					tLbl.Parent = iconBox
 				end
 
-				local eRes = TextureResolver.Resolve(cardData.effectIconFile, nil)
+				local eRes = TextureResolver.Resolve(cardData.effectIconFile, cardData.effectIcon)
 				local effColor = cardData.effectColor or Color3.new(1, 1, 1)
 				if eRes and eRes ~= "" then
 					local eImg = Instance.new("ImageLabel")

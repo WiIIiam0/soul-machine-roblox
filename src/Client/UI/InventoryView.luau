@@ -122,7 +122,7 @@ local function populateRowSlots(container: Frame, maxCount: number, defaultBorde
 				diag.Parent = box
 
 				-- Trigger icon (top-left)
-				local tRes = TextureResolver.Resolve(item.triggerIconFile, nil)
+				local tRes = TextureResolver.Resolve(item.triggerIconFile, item.triggerIcon)
 				local trigColor = item.triggerColor or Color3.new(1, 1, 1)
 				if tRes and tRes ~= "" then
 					local tImg = Instance.new("ImageLabel")
@@ -150,7 +150,7 @@ local function populateRowSlots(container: Frame, maxCount: number, defaultBorde
 				end
 
 				-- Effect icon (bottom-right)
-				local eRes = TextureResolver.Resolve(item.effectIconFile, nil)
+				local eRes = TextureResolver.Resolve(item.effectIconFile, item.effectIcon)
 				local effColor = item.effectColor or Color3.new(1, 1, 1)
 				if eRes and eRes ~= "" then
 					local eImg = Instance.new("ImageLabel")

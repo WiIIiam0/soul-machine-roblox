@@ -155,6 +155,34 @@ local EFFECT_ICON_FILES: { [PassiveEffect]: string } = {
 }
 PassivesData.EFFECT_ICON_FILES = EFFECT_ICON_FILES
 
+local EFFECT_ICONS: { [PassiveEffect]: string } = {
+	Heal = "rbxassetid://10709791480",
+	GainMaxHP = "rbxassetid://10709791437",
+	GainStatDamage = "rbxassetid://10709791557",
+	GainStatSpeed = "rbxassetid://10709791130",
+	ChargeOverdrive = "rbxassetid://10709791130",
+	GainXP = "rbxassetid://10709791054",
+	GainStatArmor = "rbxassetid://10709791281",
+	GainStatFireRate = "rbxassetid://10709791334",
+	GainCritChance = "rbxassetid://10709791223",
+	GainLifeSteal = "rbxassetid://10709791480",
+}
+
+local TRIGGER_ICONS: { [TriggerCondition]: string } = {
+	OnEnemyKilled = "rbxassetid://10709791557",
+	OnDamageDealt = "rbxassetid://10709791334",
+	OnDamageTaken = "rbxassetid://10709791281",
+	OnHeal = "rbxassetid://10709791480",
+	OnLevelUp = "rbxassetid://10709791667",
+	OnMove = "rbxassetid://10709791130",
+	OnOverdrive = "rbxassetid://10709791130",
+	OnWaveStart = "rbxassetid://10709791667",
+	OnCritHit = "rbxassetid://10709791223",
+	OnGainXP = "rbxassetid://10709791054",
+	OnStandStill = "rbxassetid://10709791437",
+	OnWeaponFire = "rbxassetid://10709791334",
+}
+
 -- Exact ScalingStat color refs from Unity RewardManager.cs GetTriggerScalingStat / GetEffectScalingStat
 local TRIGGER_SCALING_STATS: { [TriggerCondition]: string } = {
 	OnCritHit = "CriticalChance",
@@ -215,8 +243,10 @@ function PassivesData.CreateDynamicPassive(trigger: TriggerCondition, effect: Pa
 		effect = effect,
 		threshold = TRIGGER_THRESHOLDS[trigger] or 5,
 		effectPower = val,
-		icon = "",
+		icon = EFFECT_ICONS[effect] or "rbxassetid://10709791437",
 		iconFile = eIconFile,
+		triggerIcon = TRIGGER_ICONS[trigger] or "rbxassetid://10709791557",
+		effectIcon = EFFECT_ICONS[effect] or "rbxassetid://10709791437",
 		triggerIconFile = tIconFile,
 		effectIconFile = eIconFile,
 		triggerScalingStat = PassivesData.GetTriggerScalingStat(trigger),

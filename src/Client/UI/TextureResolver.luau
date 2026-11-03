@@ -30,7 +30,7 @@ end
 
 function TextureResolver.Resolve(iconFile: string?, rawIcon: string?): string?
 	if not iconFile or iconFile == "" then
-		if rawIcon and rawIcon ~= "" and not string.find(rawIcon, "rbxassetid://10709791") then
+		if rawIcon and rawIcon ~= "" then
 			return rawIcon
 		end
 		return nil
@@ -122,7 +122,7 @@ function TextureResolver.Resolve(iconFile: string?, rawIcon: string?): string?
 		end
 	end
 
-	if rawIcon and rawIcon ~= "" and not string.find(rawIcon, "rbxassetid://10709791") then
+	if rawIcon and rawIcon ~= "" then
 		return rawIcon
 	end
 
