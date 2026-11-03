@@ -58,6 +58,50 @@ local function setupPlayer(player: Player)
 
 	ZoneService.MarkPlayerArrived(player)
 
+	local function attachPlayerBlaster(character: Model)
+		local rightHand = character:WaitForChild("RightHand", 4) :: BasePart?
+			or character:WaitForChild("Right Arm", 2) :: BasePart?
+		if not rightHand then return end
+
+		local existing = character:FindFirstChild("PlayerBlasterWeapon")
+		if existing then return end
+
+		local blasterModel = Instance.new("Model")
+		blasterModel.Name = "PlayerBlasterWeapon"
+
+		local gunBody = Instance.new("Part")
+		gunBody.Name = "GunBody"
+		gunBody.Size = Vector3.new(0.4, 0.65, 2.0)
+		gunBody.Material = Enum.Material.Metal
+		gunBody.Color = Color3.fromRGB(25, 28, 35)
+		gunBody.CanCollide = false
+		gunBody.Massless = true
+		gunBody.CFrame = rightHand.CFrame * CFrame.new(0, -0.4, -0.7)
+		gunBody.Parent = blasterModel
+
+		local gunBarrel = Instance.new("Part")
+		gunBarrel.Name = "GunBarrel"
+		gunBarrel.Size = Vector3.new(0.24, 0.24, 1.2)
+		gunBarrel.Material = Enum.Material.Neon
+		gunBarrel.Color = Color3.fromRGB(0, 220, 255)
+		gunBarrel.CanCollide = false
+		gunBarrel.Massless = true
+		gunBarrel.CFrame = gunBody.CFrame * CFrame.new(0, 0.12, -1.1)
+		gunBarrel.Parent = blasterModel
+
+		local w1 = Instance.new("WeldConstraint")
+		w1.Part0 = rightHand
+		w1.Part1 = gunBody
+		w1.Parent = gunBody
+
+		local w2 = Instance.new("WeldConstraint")
+		w2.Part0 = gunBody
+		w2.Part1 = gunBarrel
+		w2.Parent = gunBarrel
+
+		blasterModel.Parent = character
+	end
+
 	local function setupCharacter(character: Model)
 		local humanoid = character:WaitForChild("Humanoid", 10) :: Humanoid?
 		local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
@@ -73,7 +117,8 @@ local function setupPlayer(player: Player)
 			-- Spawn léger décalage aléatoire autour du centre pour la coop multi-joueurs
 			hrp.CFrame = CFrame.new(math.random(-6, 6), 4, math.random(-6, 6))
 
-			-- Avatar joueur Roblox standard (préservation intégrale du skin et des animations natives)
+			-- Avatar joueur Roblox standard avec arme équipée en main
+			task.spawn(attachPlayerBlaster, character)
 
 			-- 3 secondes d'immunité + non-aggro à l'arrivée dans la zone (déplacement libre)
 			PlayerStatsManager.GrantSpawnProtection(player, 3.0)

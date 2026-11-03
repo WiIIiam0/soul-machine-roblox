@@ -172,6 +172,31 @@ local function attachPlayerWeapon(character: Model)
 	weaponModel.Parent = rightHand
 end
 
+local cachedNeck: Motor6D? = nil
+local cachedWaist: Motor6D? = nil
+local cachedRightShoulder: Motor6D? = nil
+local origNeckC0: CFrame? = nil
+local origWaistC0: CFrame? = nil
+local origRightShoulderC0: CFrame? = nil
+
+local function refreshCharacterJoints(character: Model)
+	for _, desc in ipairs(character:GetDescendants()) do
+		if desc:IsA("Motor6D") then
+			local n = string.lower(desc.Name):gsub("%s+", "")
+			if n == "neck" then
+				cachedNeck = desc
+				origNeckC0 = desc.C0
+			elseif n == "waist" then
+				cachedWaist = desc
+				origWaistC0 = desc.C0
+			elseif n == "rightshoulder" then
+				cachedRightShoulder = desc
+				origRightShoulderC0 = desc.C0
+			end
+		end
+	end
+end
+
 -- 5. Character Rotation Setup (AlignOrientation: smooth torque, zero physics conflict)
 local function setupCharacter(character: Model)
 	local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
@@ -179,11 +204,9 @@ local function setupCharacter(character: Model)
 	if not hrp or not humanoid then return end
 
 	humanoid.AutoRotate = false
-	origWaistC0 = nil
-	origNeckC0 = nil
-	origRightShoulderC0 = nil
 	currentFacingDir = nil
 
+	refreshCharacterJoints(character)
 	task.spawn(attachPlayerWeapon, character)
 
 	local rootAttachment = hrp:FindFirstChild("RootAttachment") :: Attachment?
@@ -212,9 +235,6 @@ player.CharacterAdded:Connect(setupCharacter)
 local lastAimDir: Vector3? = nil
 local lastMoveFacingDir: Vector3? = nil
 local currentFacingDir: Vector3? = nil
-local origWaistC0: CFrame? = nil
-local origNeckC0: CFrame? = nil
-local origRightShoulderC0: CFrame? = nil
 
 local function isPlayerFrozenInLevelUp(): boolean
 	if player:GetAttribute("IsLevelUpFrozen") == true then
@@ -364,54 +384,53 @@ local function onRenderStep(dt: number)
 		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir)
 
 		-- Dynamic Upper-Body Aiming (Head, Torso and Right Arm aim weapon towards enemy)
-		local upperTorso = char:FindFirstChild("UpperTorso") :: BasePart?
-		if upperTorso then
-			local neck = upperTorso:FindFirstChild("Neck") :: Motor6D?
-			local waist = upperTorso:FindFirstChild("Waist") :: Motor6D?
-			local rightShoulder = upperTorso:FindFirstChild("RightShoulder") :: Motor6D?
+		if not cachedNeck or not cachedWaist or not cachedRightShoulder then
+			refreshCharacterJoints(char)
+		end
 
-			if neck and not origNeckC0 then origNeckC0 = neck.C0 end
-			if waist and not origWaistC0 then origWaistC0 = waist.C0 end
-			if rightShoulder and not origRightShoulderC0 then origRightShoulderC0 = rightShoulder.C0 end
+		if closestPart and aimDir then
+			local toEnemy = closestPart.Position - hrp.Position
+			local localAim = hrp.CFrame:VectorToObjectSpace(toEnemy)
+			local flatDist = math.sqrt(localAim.X * localAim.X + localAim.Z * localAim.Z)
 
-			if closestPart and aimDir then
-				local toEnemy = closestPart.Position - hrp.Position
-				local localAim = hrp.CFrame:VectorToObjectSpace(toEnemy)
-				local flatDist = math.sqrt(localAim.X * localAim.X + localAim.Z * localAim.Z)
+			if flatDist > 0.1 then
+				local targetYaw = math.atan2(-localAim.X, -localAim.Z)
+				local targetPitch = math.atan2(localAim.Y, flatDist)
 
-				if flatDist > 0.1 then
-					local targetYaw = math.atan2(-localAim.X, -localAim.Z)
-					local targetPitch = math.atan2(localAim.Y, flatDist)
+				-- Head: turn up to 75° to LOOK directly at the enemy
+				local headYaw = math.clamp(targetYaw, -math.rad(75), math.rad(75))
+				local headPitch = math.clamp(-targetPitch, -math.rad(30), math.rad(30))
 
-					local maxWaistYaw = if isMoving then math.rad(45) else math.rad(15)
-					local maxHeadYaw = if isMoving then math.rad(65) else math.rad(25)
-
-					local clampedWaistYaw = math.clamp(targetYaw, -maxWaistYaw, maxWaistYaw)
-					local clampedHeadYaw = math.clamp(targetYaw, -maxHeadYaw, maxHeadYaw)
-					local clampedPitch = math.clamp(targetPitch, -math.rad(30), math.rad(30))
-
-					if waist and origWaistC0 then
-						waist.C0 = origWaistC0 * CFrame.Angles(0, clampedWaistYaw, 0)
-					end
-					if neck and origNeckC0 then
-						neck.C0 = origNeckC0 * CFrame.Angles(clampedPitch, clampedHeadYaw, 0)
-					end
-					if rightShoulder and origRightShoulderC0 then
-						local armYaw = math.clamp(targetYaw, -math.rad(60), math.rad(60))
-						rightShoulder.C0 = origRightShoulderC0 * CFrame.Angles(math.rad(75) + clampedPitch, armYaw, math.rad(-10))
-					end
+				if cachedNeck and origNeckC0 then
+					cachedNeck.C0 = origNeckC0 * CFrame.Angles(headPitch, headYaw, 0)
 				end
-			else
-				-- Outside combat: smoothly restore natural neutral pose
-				if waist and origWaistC0 then
-					waist.C0 = origWaistC0
+
+				-- Torso / Waist: swivel up to 50° towards the enemy
+				local maxWaistYaw = if isMoving then math.rad(45) else math.rad(25)
+				local waistYaw = math.clamp(targetYaw * 0.7, -maxWaistYaw, maxWaistYaw)
+
+				if cachedWaist and origWaistC0 then
+					cachedWaist.C0 = origWaistC0 * CFrame.Angles(0, waistYaw, 0)
 				end
-				if neck and origNeckC0 then
-					neck.C0 = origNeckC0
+
+				-- Right Arm: raise and aim weapon directly at the enemy!
+				local armYaw = math.clamp(targetYaw, -math.rad(75), math.rad(75))
+				local armPitch = math.clamp(targetPitch, -math.rad(35), math.rad(35))
+
+				if cachedRightShoulder and origRightShoulderC0 then
+					cachedRightShoulder.C0 = origRightShoulderC0 * CFrame.Angles(math.rad(82) + armPitch, armYaw, math.rad(-12))
 				end
-				if rightShoulder and origRightShoulderC0 then
-					rightShoulder.C0 = origRightShoulderC0
-				end
+			end
+		else
+			-- Outside combat: smoothly restore natural neutral pose
+			if cachedWaist and origWaistC0 then
+				cachedWaist.C0 = origWaistC0
+			end
+			if cachedNeck and origNeckC0 then
+				cachedNeck.C0 = origNeckC0
+			end
+			if cachedRightShoulder and origRightShoulderC0 then
+				cachedRightShoulder.C0 = origRightShoulderC0
 			end
 		end
 	end

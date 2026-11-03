@@ -335,7 +335,8 @@ RunService.Heartbeat:Connect(function(dt: number)
 		if not char or not char:FindFirstChild("HumanoidRootPart") then continue end
 
 		local pPos = (char:FindFirstChild("HumanoidRootPart") :: BasePart).Position
-		local fireOrigin = pPos + Vector3.new(0, 1.2, 0)
+		local rightHand = char:FindFirstChild("RightHand") :: BasePart? or char:FindFirstChild("Right Arm") :: BasePart?
+		local fireOrigin = if rightHand then (rightHand.Position + Vector3.new(0, 0.2, 0)) else (pPos + Vector3.new(0, 1.2, 0))
 		local stats = pData.currentStats
 		local fireRateMultiplier = math.max(0.2, stats.FireRateMultiplier)
 
