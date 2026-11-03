@@ -129,6 +129,49 @@ end
 
 UserInputService.TouchEnded:Connect(onTouchEnded)
 
+local function attachPlayerWeapon(character: Model)
+	local rightHand = character:WaitForChild("RightHand", 5) :: BasePart?
+	if not rightHand then return end
+
+	local existing = rightHand:FindFirstChild("PlayerWeaponModel")
+	if existing then return end
+
+	local weaponModel = Instance.new("Model")
+	weaponModel.Name = "PlayerWeaponModel"
+
+	local gunBody = Instance.new("Part")
+	gunBody.Name = "GunBody"
+	gunBody.Size = Vector3.new(0.35, 0.55, 1.8)
+	gunBody.Material = Enum.Material.Metal
+	gunBody.Color = Color3.fromRGB(25, 28, 35)
+	gunBody.CanCollide = false
+	gunBody.Massless = true
+	gunBody.CFrame = rightHand.CFrame * CFrame.new(0, -0.3, -0.4) * CFrame.Angles(math.rad(-10), 0, 0)
+	gunBody.Parent = weaponModel
+
+	local gunBarrel = Instance.new("Part")
+	gunBarrel.Name = "GunBarrel"
+	gunBarrel.Size = Vector3.new(0.2, 0.2, 0.9)
+	gunBarrel.Material = Enum.Material.Neon
+	gunBarrel.Color = Color3.fromRGB(0, 220, 255)
+	gunBarrel.CanCollide = false
+	gunBarrel.Massless = true
+	gunBarrel.CFrame = gunBody.CFrame * CFrame.new(0, 0.1, -0.9)
+	gunBarrel.Parent = weaponModel
+
+	local w1 = Instance.new("WeldConstraint")
+	w1.Part0 = rightHand
+	w1.Part1 = gunBody
+	w1.Parent = gunBody
+
+	local w2 = Instance.new("WeldConstraint")
+	w2.Part0 = gunBody
+	w2.Part1 = gunBarrel
+	w2.Parent = gunBarrel
+
+	weaponModel.Parent = rightHand
+end
+
 -- 5. Character Rotation Setup (AlignOrientation: smooth torque, zero physics conflict)
 local function setupCharacter(character: Model)
 	local hrp = character:WaitForChild("HumanoidRootPart", 10) :: BasePart?
@@ -137,7 +180,11 @@ local function setupCharacter(character: Model)
 
 	humanoid.AutoRotate = false
 	origWaistC0 = nil
+	origNeckC0 = nil
+	origRightShoulderC0 = nil
 	currentFacingDir = nil
+
+	task.spawn(attachPlayerWeapon, character)
 
 	local rootAttachment = hrp:FindFirstChild("RootAttachment") :: Attachment?
 	if not rootAttachment then
@@ -166,6 +213,8 @@ local lastAimDir: Vector3? = nil
 local lastMoveFacingDir: Vector3? = nil
 local currentFacingDir: Vector3? = nil
 local origWaistC0: CFrame? = nil
+local origNeckC0: CFrame? = nil
+local origRightShoulderC0: CFrame? = nil
 
 local function isPlayerFrozenInLevelUp(): boolean
 	if player:GetAttribute("IsLevelUpFrozen") == true then
@@ -286,16 +335,18 @@ local function onRenderStep(dt: number)
 			updateTargetReticle(nil)
 		end
 
-		-- Target Facing: In combat, the player ALWAYS locks facing onto aimDir (where weapons shoot).
-		-- This allows natural strafing, backpedaling (tir à reculons), and circle-kiting!
-		-- When out of combat (no enemy in range), face movement direction.
+		-- Locomotion & Weapon Aiming:
+		-- When moving (WASD): the character ALWAYS faces the direction of travel (pure, clean forward running).
+		-- When stationary (stopped): the character turns to face the combat target (aimDir).
+		local isMoving = moveDir.Magnitude > 0.05
 		local desiredFacing: Vector3
-		if aimDir then
-			desiredFacing = aimDir
-			lastAimDir = aimDir
-		elseif moveDir.Magnitude > 0.05 then
+
+		if isMoving then
 			desiredFacing = moveDir.Unit
 			lastMoveFacingDir = moveDir.Unit
+		elseif aimDir then
+			desiredFacing = aimDir
+			lastAimDir = aimDir
 		elseif lastAimDir then
 			desiredFacing = lastAimDir
 		elseif lastMoveFacingDir then
@@ -307,46 +358,59 @@ local function onRenderStep(dt: number)
 		if not currentFacingDir then
 			currentFacingDir = desiredFacing
 		else
-			-- Smooth and snappy angular slerp/lerp (responsiveness 24 rad/s)
-			currentFacingDir = currentFacingDir:Lerp(desiredFacing, math.clamp(dt * 24, 0, 1)).Unit
+			currentFacingDir = currentFacingDir:Lerp(desiredFacing, math.clamp(dt * 20, 0, 1)).Unit
 		end
 
-		-- Subtle dynamic banking/roll into strafe (feels alive and athletic)
-		local localMove = hrp.CFrame:VectorToObjectSpace(moveDir)
-		local rollAngle = 0
-		if moveDir.Magnitude > 0.05 then
-			rollAngle = math.clamp(-localMove.X * 0.06, -0.07, 0.07) -- ~4 deg lean into strafe
-		end
+		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir)
 
-		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir) * CFrame.Angles(0, 0, rollAngle)
-
-		-- Ensure waist joint is perfectly aligned with neutral pose (no broken torso twists)
+		-- Dynamic Upper-Body Aiming (Head, Torso and Right Arm aim weapon towards enemy)
 		local upperTorso = char:FindFirstChild("UpperTorso") :: BasePart?
-		local waistJoint = if upperTorso then upperTorso:FindFirstChild("Waist") :: Motor6D? else nil
-		if waistJoint then
-			if not origWaistC0 then
-				origWaistC0 = waistJoint.C0
-			end
-			waistJoint.C0 = origWaistC0
-		end
+		if upperTorso then
+			local neck = upperTorso:FindFirstChild("Neck") :: Motor6D?
+			local waist = upperTorso:FindFirstChild("Waist") :: Motor6D?
+			local rightShoulder = upperTorso:FindFirstChild("RightShoulder") :: Motor6D?
 
-		-- 8. Backpedal / Tir à Reculons: reverse walk animation speed when retreating
-		local animator = humanoid:FindFirstChildOfClass("Animator")
-		if animator then
-			local isMoving = moveDir.Magnitude > 0.05
-			local isBackpedaling = isMoving and (localMove.Z > 0.25)
-			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-				local animName = track.Animation and track.Animation.Name:lower() or track.Name:lower()
-				if string.find(animName, "walk") or string.find(animName, "run") then
-					if isBackpedaling then
-						if track.Speed > 0 then
-							track:AdjustSpeed(-1)
-						end
-					else
-						if track.Speed < 0 then
-							track:AdjustSpeed(1)
-						end
+			if neck and not origNeckC0 then origNeckC0 = neck.C0 end
+			if waist and not origWaistC0 then origWaistC0 = waist.C0 end
+			if rightShoulder and not origRightShoulderC0 then origRightShoulderC0 = rightShoulder.C0 end
+
+			if closestPart and aimDir then
+				local toEnemy = closestPart.Position - hrp.Position
+				local localAim = hrp.CFrame:VectorToObjectSpace(toEnemy)
+				local flatDist = math.sqrt(localAim.X * localAim.X + localAim.Z * localAim.Z)
+
+				if flatDist > 0.1 then
+					local targetYaw = math.atan2(-localAim.X, -localAim.Z)
+					local targetPitch = math.atan2(localAim.Y, flatDist)
+
+					local maxWaistYaw = if isMoving then math.rad(45) else math.rad(15)
+					local maxHeadYaw = if isMoving then math.rad(65) else math.rad(25)
+
+					local clampedWaistYaw = math.clamp(targetYaw, -maxWaistYaw, maxWaistYaw)
+					local clampedHeadYaw = math.clamp(targetYaw, -maxHeadYaw, maxHeadYaw)
+					local clampedPitch = math.clamp(targetPitch, -math.rad(30), math.rad(30))
+
+					if waist and origWaistC0 then
+						waist.C0 = origWaistC0 * CFrame.Angles(0, clampedWaistYaw, 0)
 					end
+					if neck and origNeckC0 then
+						neck.C0 = origNeckC0 * CFrame.Angles(clampedPitch, clampedHeadYaw, 0)
+					end
+					if rightShoulder and origRightShoulderC0 then
+						local armYaw = math.clamp(targetYaw, -math.rad(60), math.rad(60))
+						rightShoulder.C0 = origRightShoulderC0 * CFrame.Angles(math.rad(75) + clampedPitch, armYaw, math.rad(-10))
+					end
+				end
+			else
+				-- Outside combat: smoothly restore natural neutral pose
+				if waist and origWaistC0 then
+					waist.C0 = origWaistC0
+				end
+				if neck and origNeckC0 then
+					neck.C0 = origNeckC0
+				end
+				if rightShoulder and origRightShoulderC0 then
+					rightShoulder.C0 = origRightShoulderC0
 				end
 			end
 		end
