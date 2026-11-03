@@ -137,6 +137,7 @@ local function setupCharacter(character: Model)
 
 	humanoid.AutoRotate = false
 	origWaistC0 = nil
+	currentFacingDir = nil
 
 	local rootAttachment = hrp:FindFirstChild("RootAttachment") :: Attachment?
 	if not rootAttachment then
@@ -163,7 +164,7 @@ player.CharacterAdded:Connect(setupCharacter)
 
 local lastAimDir: Vector3? = nil
 local lastMoveFacingDir: Vector3? = nil
-local currentTorsoYaw = 0
+local currentFacingDir: Vector3? = nil
 local origWaistC0: CFrame? = nil
 
 local function isPlayerFrozenInLevelUp(): boolean
@@ -248,11 +249,11 @@ local function onRenderStep(dt: number)
 		humanoid:Move(Vector3.zero, false)
 	end
 
-	-- 7. AUTO-AIM AT CLOSEST ENEMY
+	-- 7. AUTO-AIM AT CLOSEST ENEMY & TWIN-STICK STRAFE MOVEMENT
 	local alignRot = hrp:FindFirstChild("MechaAimOrientation") :: AlignOrientation?
 	if alignRot then
 		local closestPart: BasePart? = nil
-		local closestDistSq = 100 * 100 -- 100 studs auto-target range
+		local closestDistSq = 55 * 55 -- 55 studs combat targeting range
 
 		local enemiesFolder = Workspace:FindFirstChild("ActiveEnemies")
 		if enemiesFolder then
@@ -285,44 +286,69 @@ local function onRenderStep(dt: number)
 			updateTargetReticle(nil)
 		end
 
-		-- 1. Lower Body / Legs Orientation: strictly aligned with movement direction
-		if moveDir.Magnitude > 0.05 then
+		-- Target Facing: In combat, the player ALWAYS locks facing onto aimDir (where weapons shoot).
+		-- This allows natural strafing, backpedaling (tir à reculons), and circle-kiting!
+		-- When out of combat (no enemy in range), face movement direction.
+		local desiredFacing: Vector3
+		if aimDir then
+			desiredFacing = aimDir
+			lastAimDir = aimDir
+		elseif moveDir.Magnitude > 0.05 then
+			desiredFacing = moveDir.Unit
 			lastMoveFacingDir = moveDir.Unit
-			alignRot.CFrame = CFrame.lookAt(Vector3.zero, moveDir.Unit)
+		elseif lastAimDir then
+			desiredFacing = lastAimDir
 		elseif lastMoveFacingDir then
-			alignRot.CFrame = CFrame.lookAt(Vector3.zero, lastMoveFacingDir)
+			desiredFacing = lastMoveFacingDir
+		else
+			desiredFacing = Vector3.new(0, 0, -1)
 		end
 
-		-- 2. Native R15 Waist Dual-Axis Aiming (UpperTorso swivels towards target)
+		if not currentFacingDir then
+			currentFacingDir = desiredFacing
+		else
+			-- Smooth and snappy angular slerp/lerp (responsiveness 24 rad/s)
+			currentFacingDir = currentFacingDir:Lerp(desiredFacing, math.clamp(dt * 24, 0, 1)).Unit
+		end
+
+		-- Subtle dynamic banking/roll into strafe (feels alive and athletic)
+		local localMove = hrp.CFrame:VectorToObjectSpace(moveDir)
+		local rollAngle = 0
+		if moveDir.Magnitude > 0.05 then
+			rollAngle = math.clamp(-localMove.X * 0.06, -0.07, 0.07) -- ~4 deg lean into strafe
+		end
+
+		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir) * CFrame.Angles(0, 0, rollAngle)
+
+		-- Ensure waist joint is perfectly aligned with neutral pose (no broken torso twists)
 		local upperTorso = char:FindFirstChild("UpperTorso") :: BasePart?
 		local waistJoint = if upperTorso then upperTorso:FindFirstChild("Waist") :: Motor6D? else nil
-		if not waistJoint then
-			-- Fallback check on HRP / Torso (R6 or custom rig)
-			local torso = char:FindFirstChild("Torso") :: BasePart?
-			waistJoint = if torso then torso:FindFirstChild("RootJoint") :: Motor6D? else (hrp:FindFirstChild("Waist") :: Motor6D?)
-		end
-
 		if waistJoint then
 			if not origWaistC0 then
 				origWaistC0 = waistJoint.C0
 			end
+			waistJoint.C0 = origWaistC0
+		end
 
-			if aimDir then
-				local localAim = hrp.CFrame:VectorToObjectSpace(aimDir)
-				local targetYaw = math.atan2(-localAim.X, -localAim.Z)
-				local diff = targetYaw - currentTorsoYaw
-				while diff > math.pi do diff -= math.pi * 2 end
-				while diff < -math.pi do diff += math.pi * 2 end
-				currentTorsoYaw = currentTorsoYaw + diff * math.clamp(dt * 18, 0, 1)
-			else
-				-- No target: smoothly realign buste forward with legs
-				local diff = -currentTorsoYaw
-				while diff > math.pi do diff -= math.pi * 2 end
-				while diff < -math.pi do diff += math.pi * 2 end
-				currentTorsoYaw = currentTorsoYaw + diff * math.clamp(dt * 12, 0, 1)
+		-- 8. Backpedal / Tir à Reculons: reverse walk animation speed when retreating
+		local animator = humanoid:FindFirstChildOfClass("Animator")
+		if animator then
+			local isMoving = moveDir.Magnitude > 0.05
+			local isBackpedaling = isMoving and (localMove.Z > 0.25)
+			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+				local animName = track.Animation and track.Animation.Name:lower() or track.Name:lower()
+				if string.find(animName, "walk") or string.find(animName, "run") then
+					if isBackpedaling then
+						if track.Speed > 0 then
+							track:AdjustSpeed(-1)
+						end
+					else
+						if track.Speed < 0 then
+							track:AdjustSpeed(1)
+						end
+					end
+				end
 			end
-
-			waistJoint.C0 = origWaistC0 * CFrame.Angles(0, currentTorsoYaw, 0)
 		end
 	end
 end
