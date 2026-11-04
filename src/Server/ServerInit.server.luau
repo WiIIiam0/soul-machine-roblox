@@ -20,6 +20,73 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 -- 1. Initialize Network Remotes FIRST so they are available immediately
 Remotes.Init()
 
+-- Automatic TheSwarm Icons Organizer
+local function organizeGameIcons()
+	local iconsFolder = ReplicatedStorage:FindFirstChild("Icons")
+	if not iconsFolder then
+		iconsFolder = Instance.new("Folder")
+		iconsFolder.Name = "Icons"
+		iconsFolder.Parent = ReplicatedStorage
+	end
+
+	local Workspace = game:GetService("Workspace")
+	local count = 0
+
+	local function processInstance(inst: Instance)
+		if inst.Parent == iconsFolder then return end
+		local nameLower = string.lower(inst.Name)
+		if string.find(nameLower, "csf", 1, true)
+			or string.find(nameLower, "skill", 1, true)
+			or string.find(nameLower, "256_", 1, true) then
+			local tex: string? = nil
+			if inst:IsA("Decal") or inst:IsA("Texture") then
+				tex = inst.Texture
+			elseif inst:IsA("ImageLabel") or inst:IsA("ImageButton") then
+				tex = inst.Image
+			else
+				local d = inst:FindFirstChildOfClass("Decal")
+				if d and d.Texture and d.Texture ~= "" then
+					tex = d.Texture
+				end
+			end
+
+			if tex and tex ~= "" then
+				count += 1
+				local cleanName = string.gsub(inst.Name, "%.png$", "")
+				if not iconsFolder:FindFirstChild(cleanName) then
+					local decal = Instance.new("Decal")
+					decal.Name = cleanName
+					decal.Texture = tex
+					decal.Parent = iconsFolder
+				end
+			end
+		end
+	end
+
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		processInstance(desc)
+	end
+	for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+		processInstance(desc)
+	end
+
+	local total = #iconsFolder:GetChildren()
+	if total > 0 then
+		print(string.format("[IconsSystem] ★ %d icônes TheSwarm prêtes dans ReplicatedStorage.Icons !", total))
+	else
+		warn("[IconsSystem] ⚠ 0 icône TheSwarm dans l'Explorer ! Dans Roblox Studio : Asset Manager -> Zanarka0 -> Ctrl+A -> Clic droit -> Insérer, puis Ctrl+S !")
+	end
+end
+
+task.spawn(organizeGameIcons)
+
+game:GetService("Workspace").DescendantAdded:Connect(function(inst)
+	local nameLower = string.lower(inst.Name)
+	if string.find(nameLower, "csf", 1, true) or string.find(nameLower, "skill", 1, true) or string.find(nameLower, "256_", 1, true) then
+		task.delay(0.3, organizeGameIcons)
+	end
+end)
+
 local ZoneService = require(script.Parent.ZoneService)
 local RunTransferService = require(script.Parent.RunTransferService)
 local PlayerStatsManager = require(script.Parent.PlayerStatsManager)
