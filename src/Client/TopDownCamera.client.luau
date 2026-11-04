@@ -230,32 +230,6 @@ local function isPlayerFrozenInLevelUp(): boolean
 	return false
 end
 
--- Synchronisation de la marche / course : marche arrière réelle ("tirer à reculons")
-local function updateLocomotionAnimation(humanoid: Humanoid, hrp: BasePart, moveDir: Vector3, hasCombatTarget: boolean)
-	local isMoving = moveDir.Magnitude > 0.05
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if not animator then return end
-
-	local animSpeed = 1.0
-	if isMoving and hasCombatTarget then
-		local facingForward = hrp.CFrame.LookVector
-		local dot = facingForward:Dot(moveDir.Unit)
-		-- Si on recule par rapport à la cible ("tirer à reculons"): animation inversée réaliste !
-		if dot < -0.25 then
-			animSpeed = -1.0
-		end
-	end
-
-	for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-		if track.Looped and (track.Priority == Enum.AnimationPriority.Core or track.Priority == Enum.AnimationPriority.Movement) then
-			local name = string.lower(track.Name)
-			if string.find(name, "run") or string.find(name, "walk") or track.WeightCurrent > 0.3 then
-				track:AdjustSpeed(animSpeed)
-			end
-		end
-	end
-end
-
 -- 6. Movement & Camera Update Loop
 local function onRenderStep(dt: number)
 	local char = player.Character
@@ -325,7 +299,7 @@ local function onRenderStep(dt: number)
 		humanoid:Move(Vector3.zero, false)
 	end
 
-	-- 7. AUTO-AIM AT CLOSEST ENEMY & TWIN-STICK STRAFE MOVEMENT
+	-- 7. AUTO-AIM AT CLOSEST ENEMY & OPTION A DÉSAXAGE ANATOMIQUE
 	local alignRot = hrp:FindFirstChild("MechaAimOrientation") :: AlignOrientation?
 	if alignRot then
 		local closestPart: BasePart? = nil
@@ -362,66 +336,62 @@ local function onRenderStep(dt: number)
 			updateTargetReticle(nil)
 		end
 
-		-- Locomotion & Weapon Aiming:
-		-- En combat : le personnage s'oriente face à sa cible (tête, torse et blaster pointés sur l'ennemi).
-		-- Lors du déplacement en combat :
-		--   - Avance vers l'ennemi : course normale
-		--   - Recule face à l'ennemi ("tirer à reculons") : l'animation de course s'inverse pour une vraie marche arrière
-		--   - Déplacement latéral ("strafe") : hanches orientées vers le mouvement, torse verrouillé sur la cible
-		-- Hors combat : s'oriente naturellement dans le sens du déplacement.
+		-- OPTION A : DÉSAXAGE ANATOMIQUE (The Division / Helldivers)
+		-- 1. Si on se déplace et qu'un ennemi est devant ou sur les côtés (angle <= 98°) :
+		--    Les jambes courent droit dans la direction de la touche. Le torse se désaxe jusqu'à 75° pour viser.
+		-- 2. Si l'ennemi passe dans le dos (> 98°) :
+		--    Le personnage pivote face à l'ennemi pour lui faire face et le canarder en reculant.
+		-- 3. À l'arrêt : le personnage fait face à sa cible.
+		-- 4. Hors combat : s'oriente naturellement dans le sens de la course.
 		local isMoving = moveDir.Magnitude > 0.05
 		local hasCombatTarget = (closestPart ~= nil and aimDir ~= nil)
 
-		local desiredFacing: Vector3
+		local desiredHrpFacing: Vector3
 
-		if hasCombatTarget and aimDir then
-			desiredFacing = aimDir
+		if isMoving then
+			if hasCombatTarget and aimDir then
+				local dot = moveDir.Unit:Dot(aimDir)
+				if dot >= -0.15 then
+					-- Ennemi devant ou sur les flancs (angle <= ~98°) : course avant naturelle
+					desiredHrpFacing = moveDir.Unit
+					lastMoveFacingDir = moveDir.Unit
+				else
+					-- Ennemi dans le dos (> 98°) : volte-face pour affronter la cible en reculant
+					desiredHrpFacing = aimDir
+					lastAimDir = aimDir
+				end
+			else
+				desiredHrpFacing = moveDir.Unit
+				lastMoveFacingDir = moveDir.Unit
+			end
+		elseif hasCombatTarget and aimDir then
+			desiredHrpFacing = aimDir
 			lastAimDir = aimDir
-		elseif isMoving then
-			desiredFacing = moveDir.Unit
-			lastMoveFacingDir = moveDir.Unit
 		elseif lastAimDir then
-			desiredFacing = lastAimDir
+			desiredHrpFacing = lastAimDir
 		elseif lastMoveFacingDir then
-			desiredFacing = lastMoveFacingDir
+			desiredHrpFacing = lastMoveFacingDir
 		else
-			desiredFacing = Vector3.new(0, 0, -1)
+			desiredHrpFacing = Vector3.new(0, 0, -1)
 		end
 
 		if not currentFacingDir then
-			currentFacingDir = desiredFacing
+			currentFacingDir = desiredHrpFacing
 		else
-			local turnSpeed = if hasCombatTarget then 28 else 20
-			currentFacingDir = currentFacingDir:Lerp(desiredFacing, math.clamp(dt * turnSpeed, 0, 1)).Unit
+			local turnSpeed = if hasCombatTarget then 24 else 20
+			currentFacingDir = currentFacingDir:Lerp(desiredHrpFacing, math.clamp(dt * turnSpeed, 0, 1)).Unit
 		end
 
 		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir)
 
-		-- Articulations du personnage et locomotion
+		-- Articulations du personnage
 		local neck, waist, rightShoulder, rootJoint = getCharacterJoints(char)
 
-		-- Synchronisation réaliste de la marche arrière / strafe
-		updateLocomotionAnimation(humanoid, hrp, moveDir, hasCombatTarget)
-
-		-- Ajustement dynamique du bassin (RootJoint) pour le strafe latéral en combat
 		if rootJoint then
-			local origRoot = getOriginalC0(rootJoint)
-			if hasCombatTarget and isMoving then
-				local facingForward = hrp.CFrame.LookVector
-				local crossY = facingForward.X * moveDir.Unit.Z - facingForward.Z * moveDir.Unit.X
-				local dot = facingForward:Dot(moveDir.Unit)
-				if math.abs(dot) < 0.65 then
-					local strafeAngle = math.clamp(-crossY * math.rad(25), -math.rad(25), math.rad(25))
-					rootJoint.C0 = origRoot * CFrame.Angles(0, strafeAngle, 0)
-				else
-					rootJoint.C0 = origRoot
-				end
-			else
-				rootJoint.C0 = origRoot
-			end
+			rootJoint.C0 = getOriginalC0(rootJoint)
 		end
 
-		-- Visée du haut du corps (Tête, Torse et Bras Droit tenant le Blaster)
+		-- Visée du haut du corps avec désaxage naturel
 		if hasCombatTarget and closestPart and aimDir then
 			local toEnemy = closestPart.Position - hrp.Position
 			local localAim = hrp.CFrame:VectorToObjectSpace(toEnemy)
@@ -429,37 +399,40 @@ local function onRenderStep(dt: number)
 
 			if flatDist > 0.1 then
 				local targetYaw = math.atan2(-localAim.X, -localAim.Z)
-				local targetPitch = math.atan2(localAim.Y, flatDist)
+				local targetPitch = math.clamp(math.atan2(localAim.Y, flatDist), -math.rad(35), math.rad(35))
 
-				-- Tête : regarde l'ennemi droit dans les yeux
-				if neck then
-					local origNeck = getOriginalC0(neck)
-					local headYaw = math.clamp(targetYaw, -math.rad(60), math.rad(60))
-					local headPitch = math.clamp(-targetPitch, -math.rad(30), math.rad(30))
-					neck.C0 = origNeck * CFrame.Angles(headPitch, headYaw, 0)
-				end
-
-				-- Torse : rotation légère pour accompagner la visée
+				-- 1. Torse (Waist) : désaxage naturel jusqu'à 75°
+				local maxWaist = math.rad(75)
+				local waistYaw = math.clamp(targetYaw, -maxWaist, maxWaist)
 				if waist then
 					local origWaist = getOriginalC0(waist)
-					local waistYaw = math.clamp(targetYaw * 0.4, -math.rad(25), math.rad(25))
 					waist.C0 = origWaist * CFrame.Angles(0, waistYaw, 0)
 				end
 
-				-- Bras droit : lève le blaster et vise la cible !
+				-- 2. Tête (Neck) : regarde la cible (pitch vertical + compensation résiduelle du regard)
+				local remainingYaw = targetYaw - waistYaw
+				local headYaw = math.clamp(remainingYaw, -math.rad(45), math.rad(45))
+				local headPitch = math.clamp(-targetPitch, -math.rad(30), math.rad(30))
+				if neck then
+					local origNeck = getOriginalC0(neck)
+					neck.C0 = origNeck * CFrame.Angles(headPitch, headYaw, 0)
+				end
+
+				-- 3. Bras droit (RightShoulder) : lève le blaster et vise la cible avec précision
 				if rightShoulder then
 					local origRS = getOriginalC0(rightShoulder)
-					local armPitch = math.clamp(targetPitch, -math.rad(35), math.rad(35))
-					local armYaw = math.clamp(targetYaw, -math.rad(45), math.rad(45))
+					local armYaw = math.clamp(remainingYaw, -math.rad(30), math.rad(30))
 
 					if humanoid.RigType == Enum.HumanoidRigType.R15 then
-						-- En R15 : lever le bras vers l'avant (-85° autour de X) + ajustement pitch/yaw
-						local aimOffset = CFrame.Angles(0, armYaw, 0) * CFrame.Angles(-math.rad(85) + armPitch, 0, math.rad(-5))
+						-- En R15 : arm raised forward (-85° sur X) + pitch + armYaw
+						local aimOffset = CFrame.Angles(0, armYaw, 0) * CFrame.Angles(-math.rad(85) + targetPitch, 0, math.rad(-3))
 						rightShoulder.C0 = origRS * aimOffset
+						rightShoulder.Transform = CFrame.identity
 					else
 						-- En R6
-						local aimOffset = CFrame.Angles(0, 0, math.rad(90) + armPitch) * CFrame.Angles(0, armYaw, 0)
+						local aimOffset = CFrame.Angles(0, 0, math.rad(90) + targetPitch) * CFrame.Angles(0, armYaw, 0)
 						rightShoulder.C0 = origRS * aimOffset
+						rightShoulder.Transform = CFrame.identity
 					end
 				end
 			end
