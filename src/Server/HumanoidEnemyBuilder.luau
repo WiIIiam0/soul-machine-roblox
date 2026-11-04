@@ -152,9 +152,12 @@ end
 
 local function weldTo(p0: BasePart, p1: BasePart, offset: CFrame)
 	p1.CFrame = p0.CFrame * offset
-	local w = Instance.new("WeldConstraint")
+	local w = Instance.new("Weld")
+	w.Name = p1.Name .. "Weld"
 	w.Part0 = p0
 	w.Part1 = p1
+	w.C0 = offset
+	w.C1 = CFrame.identity
 	w.Parent = p1
 end
 
