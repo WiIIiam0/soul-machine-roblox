@@ -81,13 +81,9 @@ dotCorner.CornerRadius = UDim.new(0.5, 0)
 dotCorner.Parent = centerDot
 
 local function updateTargetReticle(targetPart: BasePart?)
-	if targetPart and targetPart.Parent then
-		targetBillboard.Adornee = targetPart
-		targetBillboard.Enabled = true
-	else
-		targetBillboard.Enabled = false
-		targetBillboard.Adornee = nil
-	end
+	-- Disabled: avoids unwanted floating red reticle/marker in the distance
+	targetBillboard.Enabled = false
+	targetBillboard.Adornee = nil
 end
 
 -- 4. Mobile Touch Drag Movement (Left Half of Screen)
