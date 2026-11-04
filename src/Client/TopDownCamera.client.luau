@@ -150,8 +150,11 @@ local function setJointRotation(joint: Instance?, rotOffset: CFrame)
 	if not joint then return end
 	local anyJoint = joint :: any
 
-	-- Transform est toujours assignable sur AnimationConstraint ET Motor6D
+	-- Transform est toujours assignable sur AnimationConstraint ET Motor6D (dans PreSimulation)
 	pcall(function()
+		if joint:IsA("AnimationConstraint") then
+			anyJoint.IsKinematic = true
+		end
 		anyJoint.Transform = rotOffset
 	end)
 
@@ -357,6 +360,7 @@ player.CharacterAdded:Connect(setupCharacter)
 local lastAimDir: Vector3? = nil
 local lastMoveFacingDir: Vector3? = nil
 local currentFacingDir: Vector3? = nil
+local currentClosestEnemyPart: BasePart? = nil
 
 local function isPlayerFrozenInLevelUp(): boolean
 	if player:GetAttribute("IsLevelUpFrozen") == true then
@@ -371,8 +375,13 @@ local function isPlayerFrozenInLevelUp(): boolean
 	return false
 end
 
--- 6. Movement & Camera Update Loop
-local function onRenderStep(dt: number)
+-- 6. PreSimulation Loop: Movement, Physics Alignment & Option A Procedural Aiming
+-- (CRITICAL: In modern Roblox with AvatarJointUpgrade/AnimationConstraint and Motor6D,
+-- procedural .Transform rotations MUST be applied during PreSimulation/Stepped after
+-- the Animator evaluates animation tracks, so the constraint solver incorporates them before render.)
+local proceduralAimLogged: boolean = false
+
+local function onPreSimulation(dt: number)
 	local char = player.Character
 	if not char then return end
 
@@ -382,16 +391,11 @@ local function onRenderStep(dt: number)
 
 	local pPos = hrp.Position
 
-	-- Solid Top-Down Camera
-	local targetCamPos = pPos + CAMERA_OFFSET
-	local lookTarget = pPos + Vector3.new(0, 1.5, 0)
-	camera.CFrame = CFrame.lookAt(targetCamPos, lookTarget)
-
 	-- Immobilisation complète pendant le choix d'amélioration (Level-Up)
 	if isPlayerFrozenInLevelUp() then
 		touchMoveDir = Vector3.zero
 		humanoid:Move(Vector3.zero, false)
-		updateTargetReticle(nil)
+		currentClosestEnemyPart = nil
 		return
 	end
 
@@ -464,17 +468,15 @@ local function onRenderStep(dt: number)
 			end
 		end
 
-		local aimDir: Vector3? = nil
+		currentClosestEnemyPart = closestPart
 
+		local aimDir: Vector3? = nil
 		if closestPart then
 			local toEnemy = closestPart.Position - pPos
 			local flatToEnemy = Vector3.new(toEnemy.X, 0, toEnemy.Z)
 			if flatToEnemy.Magnitude > 0.1 then
 				aimDir = flatToEnemy.Unit
 			end
-			updateTargetReticle(closestPart)
-		else
-			updateTargetReticle(nil)
 		end
 
 		-- OPTION A : LOCOMOTION ET DÉSAXAGE DU BUSTE
@@ -509,7 +511,7 @@ local function onRenderStep(dt: number)
 		if not currentFacingDir or currentFacingDir.X ~= currentFacingDir.X then
 			currentFacingDir = desiredHrpFacing
 		else
-			local lerped = currentFacingDir:Lerp(desiredHrpFacing, math.clamp(dt * 25, 0, 1))
+			local lerped = currentFacingDir:Lerp(desiredHrpFacing, math.clamp(dt * 35, 0, 1))
 			if lerped.Magnitude > 0.001 then
 				currentFacingDir = lerped.Unit
 			else
@@ -524,6 +526,11 @@ local function onRenderStep(dt: number)
 
 		-- Visée du haut du corps (Désaxage anatomique jusqu'à 80°)
 		if hasCombatTarget and closestPart and aimDir then
+			if not proceduralAimLogged then
+				proceduralAimLogged = true
+				print("[TopDownCamera] Procedural upper-body aiming ACTIVE in PreSimulation!")
+			end
+
 			local toEnemy = closestPart.Position - hrp.Position
 			local localAim = hrp.CFrame:VectorToObjectSpace(toEnemy)
 			local flatDist = math.sqrt(localAim.X * localAim.X + localAim.Z * localAim.Z)
@@ -588,6 +595,37 @@ local function onRenderStep(dt: number)
 	end
 end
 
+-- 8. RenderStepped Loop: Camera Smooth Tracking & Target Reticle Display
+local function onRenderStep(dt: number)
+	local char = player.Character
+	if not char then return end
+
+	local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not hrp then return end
+
+	-- Solid Top-Down Camera
+	local targetCamPos = hrp.Position + CAMERA_OFFSET
+	local lookTarget = hrp.Position + Vector3.new(0, 1.5, 0)
+	camera.CFrame = CFrame.lookAt(targetCamPos, lookTarget)
+
+	-- Reticle Display
+	if isPlayerFrozenInLevelUp() then
+		updateTargetReticle(nil)
+	else
+		updateTargetReticle(currentClosestEnemyPart)
+	end
+end
+
+-- Connect PreSimulation (or Stepped fallback) for Physics/Joint Transforms
+if RunService.PreSimulation then
+	RunService.PreSimulation:Connect(onPreSimulation)
+else
+	(RunService :: any).Stepped:Connect(function(_time: number, dt: number)
+		onPreSimulation(dt)
+	end)
+end
+
+-- Connect RenderStepped for Camera & Screen Reticle
 RunService.RenderStepped:Connect(onRenderStep)
 
 -- 8. Overdrive Activation (Space, F, or Touch Button)
