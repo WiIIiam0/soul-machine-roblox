@@ -129,24 +129,61 @@ end
 
 UserInputService.TouchEnded:Connect(onTouchEnded)
 
-local jointOriginalC0: { [Motor6D]: CFrame } = {}
+local jointOriginalC0: { [Instance]: CFrame } = {}
 
-local function getOriginalC0(motor: Motor6D): CFrame
+local function getOriginalC0(motor: Instance): CFrame
 	local orig = jointOriginalC0[motor]
 	if not orig then
-		orig = motor.C0
+		local success, val = pcall(function()
+			return (motor :: any).C0
+		end)
+		orig = if success and typeof(val) == "CFrame" then val else CFrame.identity
 		jointOriginalC0[motor] = orig
 	end
 	return orig
 end
 
+-- Applique la rotation de manière universelle :
+-- 1. Sur AnimationConstraint (nouveaux rigs R15 AJU) : modifie .Transform (propriété standard writable)
+-- 2. Sur Motor6D classique (R6 et anciens rigs R15) : modifie .C0 et .Transform en pcall protégé
+local function setJointRotation(joint: Instance?, rotOffset: CFrame)
+	if not joint then return end
+
+	-- Transform est toujours assignable sur AnimationConstraint ET Motor6D
+	pcall(function()
+		(joint :: any).Transform = rotOffset
+	end)
+
+	-- Si c'est un Motor6D classique avec C0 writable
+	if joint:IsA("Motor6D") then
+		pcall(function()
+			local orig = getOriginalC0(joint)
+			(joint :: any).C0 = orig * rotOffset
+		end)
+	end
+end
+
+local function resetJointRotation(joint: Instance?)
+	if not joint then return end
+
+	pcall(function()
+		(joint :: any).Transform = CFrame.identity
+	end)
+
+	if joint:IsA("Motor6D") then
+		pcall(function()
+			(joint :: any).C0 = getOriginalC0(joint)
+		end)
+	end
+end
+
 local cachedChar: Model? = nil
-local cachedNeck: Motor6D? = nil
-local cachedWaist: Motor6D? = nil
-local cachedRightShoulder: Motor6D? = nil
-local cachedRootJoint: Motor6D? = nil
-local cachedLeftHip: Motor6D? = nil
-local cachedRightHip: Motor6D? = nil
+local cachedNeck: Instance? = nil
+local cachedWaist: Instance? = nil
+local cachedRightShoulder: Instance? = nil
+local cachedRootJoint: Instance? = nil
+local cachedLeftHip: Instance? = nil
+local cachedRightHip: Instance? = nil
 local cachedIsR15: boolean = false
 local jointsReadyLogged: boolean = false
 
@@ -173,7 +210,7 @@ local function getCharacterJoints(char: Model)
 	cachedRightHip = nil
 
 	if isR15 then
-		-- Recherche directe dans la hiérarchie standard R15
+		-- Recherche directe dans la hiérarchie standard R15 (Motor6D ou AnimationConstraint)
 		local upperTorso = char:FindFirstChild("UpperTorso") :: BasePart?
 		local lowerTorso = char:FindFirstChild("LowerTorso") :: BasePart?
 		local head = char:FindFirstChild("Head") :: BasePart?
@@ -182,22 +219,34 @@ local function getCharacterJoints(char: Model)
 		local rightLeg = char:FindFirstChild("RightUpperLeg") :: BasePart?
 
 		if upperTorso then
-			cachedWaist = (upperTorso:FindFirstChild("Waist") or upperTorso:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+			cachedWaist = upperTorso:FindFirstChild("Waist")
+				or upperTorso:FindFirstChildWhichIsA("Motor6D")
+				or upperTorso:FindFirstChildWhichIsA("AnimationConstraint")
 		end
 		if head then
-			cachedNeck = (head:FindFirstChild("Neck") or head:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+			cachedNeck = head:FindFirstChild("Neck")
+				or head:FindFirstChildWhichIsA("Motor6D")
+				or head:FindFirstChildWhichIsA("AnimationConstraint")
 		end
 		if lowerTorso then
-			cachedRootJoint = (lowerTorso:FindFirstChild("Root") or lowerTorso:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+			cachedRootJoint = lowerTorso:FindFirstChild("Root")
+				or lowerTorso:FindFirstChildWhichIsA("Motor6D")
+				or lowerTorso:FindFirstChildWhichIsA("AnimationConstraint")
 		end
 		if rightArm then
-			cachedRightShoulder = (rightArm:FindFirstChild("RightShoulder") or rightArm:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+			cachedRightShoulder = rightArm:FindFirstChild("RightShoulder")
+				or rightArm:FindFirstChildWhichIsA("Motor6D")
+				or rightArm:FindFirstChildWhichIsA("AnimationConstraint")
 		end
 		if leftLeg then
-			cachedLeftHip = (leftLeg:FindFirstChild("LeftHip") or leftLeg:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+			cachedLeftHip = leftLeg:FindFirstChild("LeftHip")
+				or leftLeg:FindFirstChildWhichIsA("Motor6D")
+				or leftLeg:FindFirstChildWhichIsA("AnimationConstraint")
 		end
 		if rightLeg then
-			cachedRightHip = (rightLeg:FindFirstChild("RightHip") or rightLeg:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+			cachedRightHip = rightLeg:FindFirstChild("RightHip")
+				or rightLeg:FindFirstChildWhichIsA("Motor6D")
+				or rightLeg:FindFirstChildWhichIsA("AnimationConstraint")
 		end
 	else
 		-- Recherche directe dans la hiérarchie standard R6
@@ -205,22 +254,22 @@ local function getCharacterJoints(char: Model)
 		local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
 
 		if torso then
-			cachedNeck = torso:FindFirstChild("Neck") :: Motor6D?
-			cachedRightShoulder = (torso:FindFirstChild("Right Shoulder") or torso:FindFirstChild("RightShoulder")) :: Motor6D?
-			cachedLeftHip = (torso:FindFirstChild("Left Hip") or torso:FindFirstChild("LeftHip")) :: Motor6D?
-			cachedRightHip = (torso:FindFirstChild("Right Hip") or torso:FindFirstChild("RightHip")) :: Motor6D?
+			cachedNeck = torso:FindFirstChild("Neck")
+			cachedRightShoulder = torso:FindFirstChild("Right Shoulder") or torso:FindFirstChild("RightShoulder")
+			cachedLeftHip = torso:FindFirstChild("Left Hip") or torso:FindFirstChild("LeftHip")
+			cachedRightHip = torso:FindFirstChild("Right Hip") or torso:FindFirstChild("RightHip")
 		end
 		if hrp then
-			cachedRootJoint = (hrp:FindFirstChild("RootJoint") or hrp:FindFirstChild("Root")) :: Motor6D?
+			cachedRootJoint = hrp:FindFirstChild("RootJoint") or hrp:FindFirstChild("Root")
 		end
 	end
 
 	-- Fallback récursif complet si une articulation n'était pas à son emplacement usuel
 	if not cachedNeck or (isR15 and not cachedWaist) or (not isR15 and not cachedRootJoint) then
 		for _, desc in ipairs(char:GetDescendants()) do
-			if desc:IsA("Motor6D") then
+			if desc:IsA("Motor6D") or desc:IsA("AnimationConstraint") then
 				local n = string.lower(desc.Name):gsub("[%s_%-]", "")
-				local p1Name = if desc.Part1 then string.lower(desc.Part1.Name):gsub("[%s_%-]", "") else ""
+				local p1Name = if (desc :: any).Part1 then string.lower((desc :: any).Part1.Name):gsub("[%s_%-]", "") else ""
 
 				if not cachedNeck and (n == "neck" or p1Name == "head") then
 					cachedNeck = desc
@@ -486,19 +535,13 @@ local function onRenderStep(dt: number)
 				local waistYaw = math.clamp(targetYaw, -maxWaist, maxWaist)
 
 				if isR15 and waist then
-					-- R15 : rotation directe de l'UpperTorso sur le LowerTorso
-					local origWaist = getOriginalC0(waist)
-					waist.C0 = origWaist * CFrame.Angles(0, waistYaw, 0)
+					-- R15 : rotation directe de l'UpperTorso sur le LowerTorso (Transform / C0 universel)
+					setJointRotation(waist, CFrame.Angles(0, waistYaw, 0))
 				elseif not isR15 and rootJoint then
 					-- R6 : rotation du Torso et contre-rotation des hanches pour garder les jambes dans l'axe de course
-					local origRoot = getOriginalC0(rootJoint)
-					rootJoint.C0 = origRoot * CFrame.Angles(0, 0, -waistYaw)
-					if leftHip then
-						leftHip.C0 = getOriginalC0(leftHip) * CFrame.Angles(0, 0, waistYaw)
-					end
-					if rightHip then
-						rightHip.C0 = getOriginalC0(rightHip) * CFrame.Angles(0, 0, waistYaw)
-					end
+					setJointRotation(rootJoint, CFrame.Angles(0, 0, -waistYaw))
+					setJointRotation(leftHip, CFrame.Angles(0, 0, waistYaw))
+					setJointRotation(rightHip, CFrame.Angles(0, 0, waistYaw))
 				end
 
 				-- 2. Tête : regard vers la cible
@@ -506,43 +549,39 @@ local function onRenderStep(dt: number)
 				local headYaw = math.clamp(remainingYaw, -math.rad(45), math.rad(45))
 				local headPitch = math.clamp(-targetPitch, -math.rad(30), math.rad(30))
 				if neck then
-					local origNeck = getOriginalC0(neck)
 					if isR15 then
-						neck.C0 = origNeck * CFrame.Angles(headPitch, headYaw, 0)
+						setJointRotation(neck, CFrame.Angles(headPitch, headYaw, 0))
 					else
-						neck.C0 = origNeck * CFrame.Angles(0, 0, -headYaw) * CFrame.Angles(headPitch, 0, 0)
+						setJointRotation(neck, CFrame.Angles(0, 0, -headYaw) * CFrame.Angles(headPitch, 0, 0))
 					end
 				end
 
 				-- 3. Bras droit tenant le Blaster : pointé vers la cible
 				if rightShoulder then
-					local origRS = getOriginalC0(rightShoulder)
 					local armYaw = math.clamp(remainingYaw, -math.rad(35), math.rad(35))
 
 					if isR15 then
 						-- R15 : lever le bras vers l'avant (-85° sur X) + pitch + compensation yaw
 						local aimOffset = CFrame.Angles(0, armYaw, 0) * CFrame.Angles(-math.rad(85) + targetPitch, 0, math.rad(-3))
-						rightShoulder.C0 = origRS * aimOffset
-						rightShoulder.Transform = CFrame.identity
+						setJointRotation(rightShoulder, aimOffset)
 					else
 						-- R6
 						local aimOffset = CFrame.Angles(0, 0, math.rad(90) + targetPitch) * CFrame.Angles(0, armYaw, 0)
-						rightShoulder.C0 = origRS * aimOffset
-						rightShoulder.Transform = CFrame.identity
+						setJointRotation(rightShoulder, aimOffset)
 					end
 				end
 			end
 		else
 			-- Hors combat : retour aux poses neutres naturelles
 			if isR15 then
-				if waist then waist.C0 = getOriginalC0(waist) end
+				resetJointRotation(waist)
 			else
-				if rootJoint then rootJoint.C0 = getOriginalC0(rootJoint) end
-				if leftHip then leftHip.C0 = getOriginalC0(leftHip) end
-				if rightHip then rightHip.C0 = getOriginalC0(rightHip) end
+				resetJointRotation(rootJoint)
+				resetJointRotation(leftHip)
+				resetJointRotation(rightHip)
 			end
-			if neck then neck.C0 = getOriginalC0(neck) end
-			if rightShoulder then rightShoulder.C0 = getOriginalC0(rightShoulder) end
+			resetJointRotation(neck)
+			resetJointRotation(rightShoulder)
 		end
 	end
 end
