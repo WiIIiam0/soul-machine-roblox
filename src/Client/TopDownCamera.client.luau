@@ -145,38 +145,72 @@ local cachedNeck: Motor6D? = nil
 local cachedWaist: Motor6D? = nil
 local cachedRightShoulder: Motor6D? = nil
 local cachedRootJoint: Motor6D? = nil
+local cachedLeftHip: Motor6D? = nil
+local cachedRightHip: Motor6D? = nil
+local cachedIsR15: boolean = false
+local jointsLogged: boolean = false
 
 local function getCharacterJoints(char: Model)
+	local humanoid = char:FindFirstChildOfClass("Humanoid")
+	local isR15 = if humanoid then (humanoid.RigType == Enum.HumanoidRigType.R15) else true
+
+	-- Vérifie si le cache est complet et encore actif dans le personnage
 	if cachedChar == char and cachedNeck and cachedNeck.Parent then
-		return cachedNeck, cachedWaist, cachedRightShoulder, cachedRootJoint
+		if isR15 and cachedWaist and cachedWaist.Parent then
+			return cachedNeck, cachedWaist, cachedRightShoulder, cachedRootJoint, cachedLeftHip, cachedRightHip, isR15
+		elseif not isR15 and cachedRootJoint and cachedRootJoint.Parent then
+			return cachedNeck, cachedWaist, cachedRightShoulder, cachedRootJoint, cachedLeftHip, cachedRightHip, isR15
+		end
 	end
 
 	cachedChar = char
+	cachedIsR15 = isR15
 	cachedNeck = nil
 	cachedWaist = nil
 	cachedRightShoulder = nil
 	cachedRootJoint = nil
+	cachedLeftHip = nil
+	cachedRightHip = nil
 
 	for _, desc in ipairs(char:GetDescendants()) do
 		if desc:IsA("Motor6D") then
-			local n = string.lower(desc.Name):gsub("%s+", "")
-			if n == "neck" then
+			local n = string.lower(desc.Name):gsub("[%s_%-]", "")
+			local p1Name = if desc.Part1 then string.lower(desc.Part1.Name):gsub("[%s_%-]", "") else ""
+
+			if n == "neck" or p1Name == "head" then
 				cachedNeck = desc
 				getOriginalC0(desc)
-			elseif n == "waist" then
+			elseif n == "waist" or p1Name == "uppertorso" then
 				cachedWaist = desc
 				getOriginalC0(desc)
-			elseif n == "rightshoulder" then
+			elseif n == "rightshoulder" or p1Name == "rightupperarm" or p1Name == "rightarm" then
 				cachedRightShoulder = desc
 				getOriginalC0(desc)
-			elseif n == "root" or n == "rootjoint" then
+			elseif n == "root" or n == "rootjoint" or p1Name == "lowertorso" or (not isR15 and p1Name == "torso") then
 				cachedRootJoint = desc
+				getOriginalC0(desc)
+			elseif n == "lefthip" or p1Name == "leftupperleg" or p1Name == "leftleg" then
+				cachedLeftHip = desc
+				getOriginalC0(desc)
+			elseif n == "righthip" or p1Name == "rightupperleg" or p1Name == "rightleg" then
+				cachedRightHip = desc
 				getOriginalC0(desc)
 			end
 		end
 	end
 
-	return cachedNeck, cachedWaist, cachedRightShoulder, cachedRootJoint
+	if not jointsLogged then
+		jointsLogged = true
+		print(string.format("[TopDownCamera] Rig: %s | Neck: %s | Waist: %s | RS: %s | Root: %s",
+			if isR15 then "R15" else "R6",
+			tostring(cachedNeck ~= nil),
+			tostring(cachedWaist ~= nil),
+			tostring(cachedRightShoulder ~= nil),
+			tostring(cachedRootJoint ~= nil)
+		))
+	end
+
+	return cachedNeck, cachedWaist, cachedRightShoulder, cachedRootJoint, cachedLeftHip, cachedRightHip, isR15
 end
 
 -- 5. Character Rotation Setup (AlignOrientation: smooth torque, zero physics conflict)
@@ -187,6 +221,7 @@ local function setupCharacter(character: Model)
 
 	humanoid.AutoRotate = false
 	currentFacingDir = nil
+	jointsLogged = false
 
 	getCharacterJoints(character)
 
@@ -204,7 +239,15 @@ local function setupCharacter(character: Model)
 		alignRot.Mode = Enum.OrientationAlignmentMode.OneAttachment
 		alignRot.Attachment0 = rootAttachment
 		alignRot.RigidityEnabled = true
+		alignRot.MaxTorque = math.huge
+		alignRot.Responsiveness = 200
 		alignRot.Parent = hrp
+	else
+		alignRot.Mode = Enum.OrientationAlignmentMode.OneAttachment
+		alignRot.Attachment0 = rootAttachment
+		alignRot.RigidityEnabled = true
+		alignRot.MaxTorque = math.huge
+		alignRot.Responsiveness = 200
 	end
 end
 
@@ -336,35 +379,21 @@ local function onRenderStep(dt: number)
 			updateTargetReticle(nil)
 		end
 
-		-- OPTION A : DÉSAXAGE ANATOMIQUE (The Division / Helldivers)
-		-- 1. Si on se déplace et qu'un ennemi est devant ou sur les côtés (angle <= 98°) :
-		--    Les jambes courent droit dans la direction de la touche. Le torse se désaxe jusqu'à 75° pour viser.
-		-- 2. Si l'ennemi passe dans le dos (> 98°) :
-		--    Le personnage pivote face à l'ennemi pour lui faire face et le canarder en reculant.
-		-- 3. À l'arrêt : le personnage fait face à sa cible.
-		-- 4. Hors combat : s'oriente naturellement dans le sens de la course.
+		-- OPTION A : LOCOMOTION ET DÉSAXAGE DU BUSTE
+		-- 1. LOCOMOTION : En mouvement, les jambes et le HumanoidRootPart s'orientent TOUJOURS dans le sens du déplacement.
+		--    Les jambes avancent droit devant dans la direction pressée (zéro patinage, zéro effet de marche arrière).
+		-- 2. VISÉE : À l'arrêt, le personnage fait face à l'ennemi. En course, le buste se désaxe jusqu'à 80° pour viser.
 		local isMoving = moveDir.Magnitude > 0.05
 		local hasCombatTarget = (closestPart ~= nil and aimDir ~= nil)
 
 		local desiredHrpFacing: Vector3
 
 		if isMoving then
-			if hasCombatTarget and aimDir then
-				local dot = moveDir.Unit:Dot(aimDir)
-				if dot >= -0.15 then
-					-- Ennemi devant ou sur les flancs (angle <= ~98°) : course avant naturelle
-					desiredHrpFacing = moveDir.Unit
-					lastMoveFacingDir = moveDir.Unit
-				else
-					-- Ennemi dans le dos (> 98°) : volte-face pour affronter la cible en reculant
-					desiredHrpFacing = aimDir
-					lastAimDir = aimDir
-				end
-			else
-				desiredHrpFacing = moveDir.Unit
-				lastMoveFacingDir = moveDir.Unit
-			end
+			-- En déplacement : les jambes s'orientent STRICTEMENT dans le sens de la course
+			desiredHrpFacing = moveDir.Unit
+			lastMoveFacingDir = moveDir.Unit
 		elseif hasCombatTarget and aimDir then
+			-- À l'arrêt : le personnage fait face à la cible
 			desiredHrpFacing = aimDir
 			lastAimDir = aimDir
 		elseif lastAimDir then
@@ -375,23 +404,23 @@ local function onRenderStep(dt: number)
 			desiredHrpFacing = Vector3.new(0, 0, -1)
 		end
 
-		if not currentFacingDir then
+		if not currentFacingDir or currentFacingDir.X ~= currentFacingDir.X then
 			currentFacingDir = desiredHrpFacing
 		else
-			local turnSpeed = if hasCombatTarget then 24 else 20
-			currentFacingDir = currentFacingDir:Lerp(desiredHrpFacing, math.clamp(dt * turnSpeed, 0, 1)).Unit
+			local lerped = currentFacingDir:Lerp(desiredHrpFacing, math.clamp(dt * 25, 0, 1))
+			if lerped.Magnitude > 0.001 then
+				currentFacingDir = lerped.Unit
+			else
+				currentFacingDir = desiredHrpFacing
+			end
 		end
 
 		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir)
 
-		-- Articulations du personnage
-		local neck, waist, rightShoulder, rootJoint = getCharacterJoints(char)
+		-- Récupération dynamique et sécurisée des articulations (compatible R15 et R6)
+		local neck, waist, rightShoulder, rootJoint, leftHip, rightHip, isR15 = getCharacterJoints(char)
 
-		if rootJoint then
-			rootJoint.C0 = getOriginalC0(rootJoint)
-		end
-
-		-- Visée du haut du corps avec désaxage naturel
+		-- Visée du haut du corps (Désaxage anatomique jusqu'à 80°)
 		if hasCombatTarget and closestPart and aimDir then
 			local toEnemy = closestPart.Position - hrp.Position
 			local localAim = hrp.CFrame:VectorToObjectSpace(toEnemy)
@@ -401,35 +430,51 @@ local function onRenderStep(dt: number)
 				local targetYaw = math.atan2(-localAim.X, -localAim.Z)
 				local targetPitch = math.clamp(math.atan2(localAim.Y, flatDist), -math.rad(35), math.rad(35))
 
-				-- 1. Torse (Waist) : désaxage naturel jusqu'à 75°
-				local maxWaist = math.rad(75)
+				-- 1. Torse : désaxage anatomique jusqu'à 80°
+				local maxWaist = math.rad(80)
 				local waistYaw = math.clamp(targetYaw, -maxWaist, maxWaist)
-				if waist then
+
+				if isR15 and waist then
+					-- R15 : rotation directe de l'UpperTorso sur le LowerTorso
 					local origWaist = getOriginalC0(waist)
 					waist.C0 = origWaist * CFrame.Angles(0, waistYaw, 0)
+				elseif not isR15 and rootJoint then
+					-- R6 : rotation du Torso et contre-rotation des hanches pour garder les jambes dans l'axe de course
+					local origRoot = getOriginalC0(rootJoint)
+					rootJoint.C0 = origRoot * CFrame.Angles(0, 0, -waistYaw)
+					if leftHip then
+						leftHip.C0 = getOriginalC0(leftHip) * CFrame.Angles(0, 0, waistYaw)
+					end
+					if rightHip then
+						rightHip.C0 = getOriginalC0(rightHip) * CFrame.Angles(0, 0, waistYaw)
+					end
 				end
 
-				-- 2. Tête (Neck) : regarde la cible (pitch vertical + compensation résiduelle du regard)
+				-- 2. Tête : regard vers la cible
 				local remainingYaw = targetYaw - waistYaw
 				local headYaw = math.clamp(remainingYaw, -math.rad(45), math.rad(45))
 				local headPitch = math.clamp(-targetPitch, -math.rad(30), math.rad(30))
 				if neck then
 					local origNeck = getOriginalC0(neck)
-					neck.C0 = origNeck * CFrame.Angles(headPitch, headYaw, 0)
+					if isR15 then
+						neck.C0 = origNeck * CFrame.Angles(headPitch, headYaw, 0)
+					else
+						neck.C0 = origNeck * CFrame.Angles(0, 0, -headYaw) * CFrame.Angles(headPitch, 0, 0)
+					end
 				end
 
-				-- 3. Bras droit (RightShoulder) : lève le blaster et vise la cible avec précision
+				-- 3. Bras droit tenant le Blaster : pointé vers la cible
 				if rightShoulder then
 					local origRS = getOriginalC0(rightShoulder)
-					local armYaw = math.clamp(remainingYaw, -math.rad(30), math.rad(30))
+					local armYaw = math.clamp(remainingYaw, -math.rad(35), math.rad(35))
 
-					if humanoid.RigType == Enum.HumanoidRigType.R15 then
-						-- En R15 : arm raised forward (-85° sur X) + pitch + armYaw
+					if isR15 then
+						-- R15 : lever le bras vers l'avant (-85° sur X) + pitch + compensation yaw
 						local aimOffset = CFrame.Angles(0, armYaw, 0) * CFrame.Angles(-math.rad(85) + targetPitch, 0, math.rad(-3))
 						rightShoulder.C0 = origRS * aimOffset
 						rightShoulder.Transform = CFrame.identity
 					else
-						-- En R6
+						-- R6
 						local aimOffset = CFrame.Angles(0, 0, math.rad(90) + targetPitch) * CFrame.Angles(0, armYaw, 0)
 						rightShoulder.C0 = origRS * aimOffset
 						rightShoulder.Transform = CFrame.identity
@@ -438,15 +483,15 @@ local function onRenderStep(dt: number)
 			end
 		else
 			-- Hors combat : retour aux poses neutres naturelles
-			if neck then
-				neck.C0 = getOriginalC0(neck)
+			if isR15 then
+				if waist then waist.C0 = getOriginalC0(waist) end
+			else
+				if rootJoint then rootJoint.C0 = getOriginalC0(rootJoint) end
+				if leftHip then leftHip.C0 = getOriginalC0(leftHip) end
+				if rightHip then rightHip.C0 = getOriginalC0(rightHip) end
 			end
-			if waist then
-				waist.C0 = getOriginalC0(waist)
-			end
-			if rightShoulder then
-				rightShoulder.C0 = getOriginalC0(rightShoulder)
-			end
+			if neck then neck.C0 = getOriginalC0(neck) end
+			if rightShoulder then rightShoulder.C0 = getOriginalC0(rightShoulder) end
 		end
 	end
 end
