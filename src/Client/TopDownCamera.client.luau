@@ -148,31 +148,33 @@ end
 -- 2. Sur Motor6D classique (R6 et anciens rigs R15) : modifie .C0 et .Transform en pcall protégé
 local function setJointRotation(joint: Instance?, rotOffset: CFrame)
 	if not joint then return end
+	local anyJoint = joint :: any
 
 	-- Transform est toujours assignable sur AnimationConstraint ET Motor6D
 	pcall(function()
-		(joint :: any).Transform = rotOffset
+		anyJoint.Transform = rotOffset
 	end)
 
 	-- Si c'est un Motor6D classique avec C0 writable
 	if joint:IsA("Motor6D") then
 		pcall(function()
 			local orig = getOriginalC0(joint)
-			(joint :: any).C0 = orig * rotOffset
+			anyJoint.C0 = orig * rotOffset
 		end)
 	end
 end
 
 local function resetJointRotation(joint: Instance?)
 	if not joint then return end
+	local anyJoint = joint :: any
 
 	pcall(function()
-		(joint :: any).Transform = CFrame.identity
+		anyJoint.Transform = CFrame.identity
 	end)
 
 	if joint:IsA("Motor6D") then
 		pcall(function()
-			(joint :: any).C0 = getOriginalC0(joint)
+			anyJoint.C0 = getOriginalC0(joint)
 		end)
 	end
 end
