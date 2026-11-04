@@ -148,7 +148,7 @@ local cachedRootJoint: Motor6D? = nil
 local cachedLeftHip: Motor6D? = nil
 local cachedRightHip: Motor6D? = nil
 local cachedIsR15: boolean = false
-local jointsLogged: boolean = false
+local jointsReadyLogged: boolean = false
 
 local function getCharacterJoints(char: Model)
 	local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -172,39 +172,88 @@ local function getCharacterJoints(char: Model)
 	cachedLeftHip = nil
 	cachedRightHip = nil
 
-	for _, desc in ipairs(char:GetDescendants()) do
-		if desc:IsA("Motor6D") then
-			local n = string.lower(desc.Name):gsub("[%s_%-]", "")
-			local p1Name = if desc.Part1 then string.lower(desc.Part1.Name):gsub("[%s_%-]", "") else ""
+	if isR15 then
+		-- Recherche directe dans la hiérarchie standard R15
+		local upperTorso = char:FindFirstChild("UpperTorso") :: BasePart?
+		local lowerTorso = char:FindFirstChild("LowerTorso") :: BasePart?
+		local head = char:FindFirstChild("Head") :: BasePart?
+		local rightArm = char:FindFirstChild("RightUpperArm") :: BasePart? or char:FindFirstChild("Right Arm") :: BasePart?
+		local leftLeg = char:FindFirstChild("LeftUpperLeg") :: BasePart?
+		local rightLeg = char:FindFirstChild("RightUpperLeg") :: BasePart?
 
-			if n == "neck" or p1Name == "head" then
-				cachedNeck = desc
-				getOriginalC0(desc)
-			elseif n == "waist" or p1Name == "uppertorso" then
-				cachedWaist = desc
-				getOriginalC0(desc)
-			elseif n == "rightshoulder" or p1Name == "rightupperarm" or p1Name == "rightarm" then
-				cachedRightShoulder = desc
-				getOriginalC0(desc)
-			elseif n == "root" or n == "rootjoint" or p1Name == "lowertorso" or (not isR15 and p1Name == "torso") then
-				cachedRootJoint = desc
-				getOriginalC0(desc)
-			elseif n == "lefthip" or p1Name == "leftupperleg" or p1Name == "leftleg" then
-				cachedLeftHip = desc
-				getOriginalC0(desc)
-			elseif n == "righthip" or p1Name == "rightupperleg" or p1Name == "rightleg" then
-				cachedRightHip = desc
-				getOriginalC0(desc)
+		if upperTorso then
+			cachedWaist = (upperTorso:FindFirstChild("Waist") or upperTorso:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+		end
+		if head then
+			cachedNeck = (head:FindFirstChild("Neck") or head:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+		end
+		if lowerTorso then
+			cachedRootJoint = (lowerTorso:FindFirstChild("Root") or lowerTorso:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+		end
+		if rightArm then
+			cachedRightShoulder = (rightArm:FindFirstChild("RightShoulder") or rightArm:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+		end
+		if leftLeg then
+			cachedLeftHip = (leftLeg:FindFirstChild("LeftHip") or leftLeg:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+		end
+		if rightLeg then
+			cachedRightHip = (rightLeg:FindFirstChild("RightHip") or rightLeg:FindFirstChildWhichIsA("Motor6D")) :: Motor6D?
+		end
+	else
+		-- Recherche directe dans la hiérarchie standard R6
+		local torso = char:FindFirstChild("Torso") :: BasePart?
+		local hrp = char:FindFirstChild("HumanoidRootPart") :: BasePart?
+
+		if torso then
+			cachedNeck = torso:FindFirstChild("Neck") :: Motor6D?
+			cachedRightShoulder = (torso:FindFirstChild("Right Shoulder") or torso:FindFirstChild("RightShoulder")) :: Motor6D?
+			cachedLeftHip = (torso:FindFirstChild("Left Hip") or torso:FindFirstChild("LeftHip")) :: Motor6D?
+			cachedRightHip = (torso:FindFirstChild("Right Hip") or torso:FindFirstChild("RightHip")) :: Motor6D?
+		end
+		if hrp then
+			cachedRootJoint = (hrp:FindFirstChild("RootJoint") or hrp:FindFirstChild("Root")) :: Motor6D?
+		end
+	end
+
+	-- Fallback récursif complet si une articulation n'était pas à son emplacement usuel
+	if not cachedNeck or (isR15 and not cachedWaist) or (not isR15 and not cachedRootJoint) then
+		for _, desc in ipairs(char:GetDescendants()) do
+			if desc:IsA("Motor6D") then
+				local n = string.lower(desc.Name):gsub("[%s_%-]", "")
+				local p1Name = if desc.Part1 then string.lower(desc.Part1.Name):gsub("[%s_%-]", "") else ""
+
+				if not cachedNeck and (n == "neck" or p1Name == "head") then
+					cachedNeck = desc
+				elseif not cachedWaist and (n == "waist" or p1Name == "uppertorso") then
+					cachedWaist = desc
+				elseif not cachedRightShoulder and (n == "rightshoulder" or p1Name == "rightupperarm" or p1Name == "rightarm") then
+					cachedRightShoulder = desc
+				elseif not cachedRootJoint and (n == "root" or n == "rootjoint" or p1Name == "lowertorso" or (not isR15 and p1Name == "torso")) then
+					cachedRootJoint = desc
+				elseif not cachedLeftHip and (n == "lefthip" or p1Name == "leftupperleg" or p1Name == "leftleg") then
+					cachedLeftHip = desc
+				elseif not cachedRightHip and (n == "righthip" or p1Name == "rightupperleg" or p1Name == "rightleg") then
+					cachedRightHip = desc
+				end
 			end
 		end
 	end
 
-	if not jointsLogged then
-		jointsLogged = true
-		print(string.format("[TopDownCamera] Rig: %s | Neck: %s | Waist: %s | RS: %s | Root: %s",
+	-- Enregistrement des C0 originaux pour chaque articulation trouvée
+	if cachedNeck then getOriginalC0(cachedNeck) end
+	if cachedWaist then getOriginalC0(cachedWaist) end
+	if cachedRightShoulder then getOriginalC0(cachedRightShoulder) end
+	if cachedRootJoint then getOriginalC0(cachedRootJoint) end
+	if cachedLeftHip then getOriginalC0(cachedLeftHip) end
+	if cachedRightHip then getOriginalC0(cachedRightHip) end
+
+	local isReady = if isR15 then (cachedWaist ~= nil) else (cachedRootJoint ~= nil)
+	if isReady and not jointsReadyLogged then
+		jointsReadyLogged = true
+		print(string.format("[TopDownCamera] JOINTS READY! Rig: %s | Waist: %s | Neck: %s | RS: %s | Root: %s",
 			if isR15 then "R15" else "R6",
-			tostring(cachedNeck ~= nil),
 			tostring(cachedWaist ~= nil),
+			tostring(cachedNeck ~= nil),
 			tostring(cachedRightShoulder ~= nil),
 			tostring(cachedRootJoint ~= nil)
 		))
@@ -221,9 +270,7 @@ local function setupCharacter(character: Model)
 
 	humanoid.AutoRotate = false
 	currentFacingDir = nil
-	jointsLogged = false
-
-	getCharacterJoints(character)
+	jointsReadyLogged = false
 
 	local rootAttachment = hrp:FindFirstChild("RootAttachment") :: Attachment?
 	if not rootAttachment then
@@ -383,15 +430,19 @@ local function onRenderStep(dt: number)
 		-- 1. LOCOMOTION : En mouvement, les jambes et le HumanoidRootPart s'orientent TOUJOURS dans le sens du déplacement.
 		--    Les jambes avancent droit devant dans la direction pressée (zéro patinage, zéro effet de marche arrière).
 		-- 2. VISÉE : À l'arrêt, le personnage fait face à l'ennemi. En course, le buste se désaxe jusqu'à 80° pour viser.
-		local isMoving = moveDir.Magnitude > 0.05
+		local isMoving = (moveDir.Magnitude > 0.05) or (humanoid.MoveDirection.Magnitude > 0.05)
+		local effectiveMoveDir: Vector3 = if moveDir.Magnitude > 0.05
+			then moveDir.Unit
+			else (if humanoid.MoveDirection.Magnitude > 0.05 then humanoid.MoveDirection.Unit else Vector3.new(0, 0, -1))
+
 		local hasCombatTarget = (closestPart ~= nil and aimDir ~= nil)
 
 		local desiredHrpFacing: Vector3
 
 		if isMoving then
 			-- En déplacement : les jambes s'orientent STRICTEMENT dans le sens de la course
-			desiredHrpFacing = moveDir.Unit
-			lastMoveFacingDir = moveDir.Unit
+			desiredHrpFacing = effectiveMoveDir
+			lastMoveFacingDir = effectiveMoveDir
 		elseif hasCombatTarget and aimDir then
 			-- À l'arrêt : le personnage fait face à la cible
 			desiredHrpFacing = aimDir
@@ -415,7 +466,7 @@ local function onRenderStep(dt: number)
 			end
 		end
 
-		alignRot.CFrame = CFrame.lookAt(Vector3.zero, currentFacingDir)
+		alignRot.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + currentFacingDir)
 
 		-- Récupération dynamique et sécurisée des articulations (compatible R15 et R6)
 		local neck, waist, rightShoulder, rootJoint, leftHip, rightHip, isR15 = getCharacterJoints(char)

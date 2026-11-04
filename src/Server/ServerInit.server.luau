@@ -9,6 +9,11 @@ local StarterPlayer = game:GetService("StarterPlayer")
 StarterPlayer.DevComputerMovementMode = Enum.DevComputerMovementMode.KeyboardMouse
 StarterPlayer.EnableMouseLockOption = false
 
+-- Ensure classic Motor6D joint structure for procedural upper-body aiming
+pcall(function()
+	(StarterPlayer :: any).AvatarJointUpgrade = Enum.AvatarJointUpgrade.Disabled
+end)
+
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
